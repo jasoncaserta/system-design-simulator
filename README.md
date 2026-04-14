@@ -1,73 +1,76 @@
-# React + TypeScript + Vite
+# System Design Simulator
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+An interactive, frontend-first backend architecture simulator built with **React**, **TypeScript**, and **React Flow**. Visualize how your system behaves under load, identify bottlenecks, and experiment with horizontal and vertical scaling strategies in real-time.
 
-Currently, two official plugins are available:
+![System Design Simulator Screenshot](https://github.com/jasoncaserta/system-design-simulator/blob/main/src/assets/hero.png?raw=true)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🚀 Features
 
-## React Compiler
+- **Interactive Architecture Canvas**: Drag, drop, and connect system components visually using React Flow.
+- **Steady-State Simulation Engine**: Real-time load propagation from Clients through LBs, App Servers, Caches, and Databases.
+- **Horizontal Scaling**: Add or remove instances of any component to distribute traffic.
+- **Vertical Scaling**: Choose from predefined instance sizes (Small, Medium, Large, X-Large) to increase per-node capacity.
+- **Bottleneck Diagnosis**: Intelligent overlay panel that flags overloaded components and provides tailored remediation advice.
+- **Starter Template**: Instantly load a classic "Client → LB → App → Cache → DB" architecture to begin simulating.
+- **Live Visual Metrics**: Components change color (Green → Yellow → Red) and show animated load bars based on current QPS vs. total capacity.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🛠️ Tech Stack
 
-## Expanding the ESLint configuration
+- **Framework**: React 19 (TypeScript)
+- **State Management**: Zustand (Simulation logic & Graph state)
+- **Diagramming**: React Flow v11
+- **Styling**: Tailwind CSS v4
+- **Icons**: Lucide React
+- **Build Tool**: Vite 8
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 🧠 Simulation Logic
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+The simulator uses a **Steady-State Mathematical Model** to calculate instantaneous load across the system graph:
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+1.  **Total QPS**: `Concurrent Users * Requests Per Second Per User`.
+2.  **Load Balancing**: Traffic is distributed equally across all instances of a component.
+3.  **Data Flow**:
+    - **Read Traffic**: Routed from App Servers to Cache. Cache hits reduce DB load; cache misses fall through to the Database.
+    - **Write Traffic**: Routed directly from App Servers to the Database.
+4.  **Capacity**: `Node Total Capacity = Instance Count * Capacity Per Instance Size`.
+5.  **Health**: `Status = (Current Load / Total Capacity)`. Status is 'Overloaded' if ratio > 1.0.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## 🏁 Getting Started
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Prerequisites
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- [Node.js](https://nodejs.org/) (v18+)
+- [npm](https://www.npmjs.com/)
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/jasoncaserta/system-design-simulator.git
+   cd system-design-simulator
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+4. Open [http://localhost:5173](http://localhost:5173) in your browser.
+
+## 📖 Usage
+
+1. **Adjust Traffic**: Use the sliders in the **Global Traffic** section to increase users or RPS.
+2. **Modify Behavior**: Tweak **Read vs. Write Ratio** or **Cache Hit Rate** to see how they impact database and cache load.
+3. **Scale Your System**: 
+   - Click **+** or **-** on infrastructure nodes for **Horizontal Scaling**.
+   - Change the **Instance Size** dropdown for **Vertical Scaling**.
+4. **Fix Bottlenecks**: Watch the **Bottleneck Panel** for alerts when nodes turn red and follow the "Fix" recommendations.
+
+---
+
+Built with ❤️ for system design enthusiasts.
