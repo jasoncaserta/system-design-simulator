@@ -1,4 +1,3 @@
-import React from 'react';
 import { useSimulatorStore } from '../../store/useSimulatorStore';
 
 const INFRA_LAYERS = [

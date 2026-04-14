@@ -1,4 +1,3 @@
-import React from 'react';
 import { useSimulatorStore } from '../../store/useSimulatorStore';
 import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
 
@@ -23,8 +22,6 @@ export const BottleneckPanel = () => {
       </div>
     );
   }
-
-  const primaryFailure = overloadedNodes[0] || stressedNodes[0];
 
   const getRecommendation = (nodeId: string) => {
     switch (nodeId) {

@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 import type { NodeProps } from 'reactflow';
 import type { NodeData } from '../../store/types';
@@ -35,7 +35,7 @@ export const CustomNode = memo(({ data }: NodeProps<NodeData>) => {
   return (
     <div className="relative">
       <div className={cn(
-        'px-4 py-2 shadow-lg rounded-md border-2 w-[200px] bg-white dark:bg-gray-900 transition-all duration-300',
+        'px-4 py-3 shadow-lg rounded-md border-2 w-[220px] bg-white dark:bg-gray-900 transition-all duration-300 text-slate-900 dark:text-white',
         statusColor,
         isCluster ? 'border-b-4' : ''
       )}>
@@ -76,13 +76,13 @@ export const CustomNode = memo(({ data }: NodeProps<NodeData>) => {
         </div>
 
         <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-          <div className="flex justify-between items-center">
-            <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Load</span>
-            <span className="text-xs font-mono font-bold">
-              {data.currentLoad.toFixed(1)} <span className="text-[8px] font-normal uppercase">Queries / Sec</span>
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Load Info</span>
+            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">
+               {((data.currentLoad / (data.instances * data.maxCapacityPerInstance)) * 100).toFixed(0)}%
             </span>
           </div>
-          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-1 overflow-hidden">
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
             <div 
               className={cn(
                 "h-full rounded-full transition-all duration-500",
@@ -91,6 +91,11 @@ export const CustomNode = memo(({ data }: NodeProps<NodeData>) => {
               )}
               style={{ width: `${Math.min(100, (data.currentLoad / (data.instances * data.maxCapacityPerInstance)) * 100)}%` }}
             />
+          </div>
+          <div className="mt-1 flex justify-end">
+            <span className="text-xs font-mono font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+              {data.currentLoad.toFixed(1)} <span className="text-[9px] font-normal uppercase opacity-60 ml-0.5">Queries / Sec</span>
+            </span>
           </div>
         </div>
 

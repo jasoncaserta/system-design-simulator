@@ -38,3 +38,22 @@ body {
   stroke-width: 2;
   stroke-dasharray: 5;
 }
+
+.custom-edge-animated {
+  stroke-dasharray: 8;
+  stroke: #3b82f6;
+  stroke-width: 3;
+  animation-name: dashdraw;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  pointer-events: none;
+}
+
+@keyframes dashdraw {
+  from {
+    stroke-dashoffset: 16;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}

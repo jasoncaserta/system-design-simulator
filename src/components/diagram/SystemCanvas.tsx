@@ -1,16 +1,21 @@
-import React, { useCallback, useEffect } from 'react';
-import ReactFlow, { 
-  Background, 
-  Controls, 
+import { useEffect } from 'react';
+import ReactFlow, {
+  Background,
+  Controls,
   MiniMap,
   Panel
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useSimulatorStore } from '../../store/useSimulatorStore';
 import { CustomNode } from './CustomNodes';
+import { CustomEdge } from './CustomEdges';
 
 const nodeTypes = {
   custom: CustomNode,
+};
+
+const edgeTypes = {
+  custom: CustomEdge,
 };
 
 export const SystemCanvas = () => {
@@ -38,6 +43,7 @@ export const SystemCanvas = () => {
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
       >
         <Background />

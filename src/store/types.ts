@@ -12,6 +12,10 @@ export interface NodeData {
   status: NodeStatus;
 }
 
+export interface EdgeData {
+  qps: number;
+}
+
 export interface SimulationParams {
   users: number;
   rpsPerUser: number;
@@ -21,7 +25,7 @@ export interface SimulationParams {
 
 export interface SimulationStore extends SimulationParams {
   nodes: Node<NodeData>[];
-  edges: Edge[];
+  edges: Edge<EdgeData>[];
   nodeCounts: Record<string, number>;
   nodeCapacities: Record<string, number>;
   

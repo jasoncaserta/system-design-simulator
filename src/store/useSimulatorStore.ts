@@ -11,7 +11,7 @@ import type {
   NodeChange, 
   EdgeChange 
 } from 'reactflow';
-import type { SimulationStore, SimulationParams, NodeData, NodeType, NodeStatus } from './types';
+import type { SimulationStore, SimulationParams, NodeData, EdgeData, NodeType } from './types';
 
 const INITIAL_PARAMS: SimulationParams = {
   users: 100,
@@ -193,28 +193,31 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
     });
 
     // 4. Generate Edges
-    const newEdges: Edge[] = [];
+    const newEdges: Edge<EdgeData>[] = [];
     
     // Helper to connect tiers
-    const connectTiers = (sourceTier: string, targetTier: string) => {
+    const connectTiers = (sourceTier: string, targetTier: string, traffic: number) => {
       const sources = tierInstances[sourceTier];
       const targets = tierInstances[targetTier];
+      const qpsPerEdge = traffic / (sources.length * targets.length);
+
       sources.forEach(s => {
         targets.forEach(t => {
           newEdges.push({
             id: `e-${s}-${t}`,
             source: s,
             target: t,
-            animated: nodeMap.get(s)?.data.status !== 'idle'
+            type: 'custom',
+            data: { qps: qpsPerEdge }
           });
         });
       });
     };
 
-    connectTiers('client', 'lb');
-    connectTiers('lb', 'app');
-    connectTiers('app', 'cache');
-    connectTiers('app', 'db');
+    connectTiers('client', 'lb', totalQps);
+    connectTiers('lb', 'app', totalQps);
+    connectTiers('app', 'cache', readTraffic);
+    connectTiers('app', 'db', dbTotalTraffic);
 
     set({ nodes: newNodes, edges: newEdges });
   },

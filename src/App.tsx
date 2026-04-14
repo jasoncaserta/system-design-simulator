@@ -1,4 +1,3 @@
-import React from 'react';
 import { SimulationSidebar } from './components/controls/SimulationSidebar';
 import { SystemCanvas } from './components/diagram/SystemCanvas';
 import { BottleneckPanel } from './components/diagnostics/BottleneckPanel';
