@@ -3,6 +3,7 @@ import {
   addEdge, 
   applyNodeChanges, 
   applyEdgeChanges,
+  MarkerType,
 } from 'reactflow';
 import type { 
   Connection, 
@@ -37,11 +38,11 @@ const INITIAL_CAPACITIES = {
 };
 
 const LAYERS = [
-  { id: 'client', type: 'client', label: 'Clients', x: 0, y: 150 },
-  { id: 'lb', type: 'lb', label: 'Load Balancer', x: 250, y: 150 },
-  { id: 'app', type: 'app', label: 'App Server', x: 500, y: 150 },
-  { id: 'cache', type: 'cache', label: 'Redis Cache', x: 750, y: 50 },
-  { id: 'db', type: 'db', label: 'Postgres DB', x: 750, y: 250 },
+  { id: 'client', type: 'client', label: 'Clients', x: 0, y: 200 },
+  { id: 'lb', type: 'lb', label: 'Load Balancer', x: 380, y: 200 },
+  { id: 'app', type: 'app', label: 'App Server', x: 760, y: 200 },
+  { id: 'cache', type: 'cache', label: 'Redis Cache', x: 1140, y: 50 },
+  { id: 'db', type: 'db', label: 'Postgres DB', x: 1140, y: 350 },
 ];
 
 export const useSimulatorStore = create<SimulationStore>((set, get) => ({
@@ -123,7 +124,7 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
         const id = count > 1 ? `${layer.id}-${i}` : layer.id;
         tierInstances[layer.id].push(id);
         
-        const yOffset = count > 1 ? (i - (count - 1) / 2) * 120 : 0;
+        const yOffset = count > 1 ? (i - (count - 1) / 2) * 160 : 0;
         
         newNodes.push({
           id,
@@ -208,7 +209,7 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
             source: s,
             target: t,
             type: 'custom',
-            data: { qps: qpsPerEdge }
+            data: { qps: qpsPerEdge },
           });
         });
       });
