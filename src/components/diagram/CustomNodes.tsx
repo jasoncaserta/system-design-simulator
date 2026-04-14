@@ -57,7 +57,7 @@ export const CustomNode = memo(({ data }: NodeProps<NodeData>) => {
         <div className="flex justify-between items-center">
           <span className="text-[10px] text-gray-500 uppercase">Load</span>
           <span className="text-xs font-mono font-bold">
-            {data.currentLoad.toFixed(1)} <span className="text-[8px] font-normal">QPS</span>
+            {data.currentLoad.toFixed(1)} <span className="text-[8px] font-normal uppercase">Queries / Sec</span>
           </span>
         </div>
         <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 mt-1">

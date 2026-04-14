@@ -14,7 +14,7 @@ import type {
 import type { SimulationStore, SimulationParams, NodeData, NodeType, NodeStatus } from './types';
 
 const INITIAL_PARAMS: SimulationParams = {
-  users: 500,
+  users: 100,
   rpsPerUser: 0.1,
   readWriteRatio: 1.0,
   cacheHitRate: 0.8,

@@ -60,7 +60,7 @@ export const SimulationSidebar = () => {
 
         <div>
           <label className="flex justify-between text-sm font-semibold mb-2 text-slate-900 dark:text-white">
-            <span>RPS per User</span>
+            <span>Requests per User</span>
             <span className="font-mono text-blue-600 dark:text-white font-bold">{rpsPerUser.toFixed(2)}</span>
           </label>
           <input 
@@ -76,7 +76,7 @@ export const SimulationSidebar = () => {
 
         <div className="pt-2">
           <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-            <span>Total QPS:</span>
+            <span>Total Queries Per Second:</span>
             <span className="font-mono font-bold text-gray-700 dark:text-white text-sm">
               {(users * rpsPerUser).toLocaleString(undefined, { maximumFractionDigits: 1 })}
             </span>
