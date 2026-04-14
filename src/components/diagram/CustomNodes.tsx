@@ -33,7 +33,7 @@ export const CustomNode = memo(({ data }: NodeProps<NodeData>) => {
 
   return (
     <div className={cn(
-      'px-4 py-2 shadow-md rounded-md border-2 min-w-[150px]',
+      'px-4 py-2 shadow-md rounded-md border-2 w-[200px]',
       statusColor
     )}>
       <Handle type="target" position={Position.Left} className="w-2 h-2 !bg-gray-400" />

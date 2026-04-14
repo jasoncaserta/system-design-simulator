@@ -11,18 +11,21 @@ function App() {
 
       {/* Main Content Area - Flexible Width */}
       <div className="flex-1 flex flex-col relative h-full overflow-hidden">
-        {/* Header Overlay */}
-        <header className="absolute top-4 left-4 z-10 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
-          <h1 className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight flex items-center">
-            <span className="bg-blue-600 text-white p-1 rounded mr-2 h-6 w-6 flex items-center justify-center text-sm font-mono italic">S</span>
-            System Design Simulator
-          </h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Interactive Scaling & Bottleneck Simulator</p>
-        </header>
+        {/* Overlays Container */}
+        <div className="absolute top-4 left-4 z-10 flex items-start gap-4 pointer-events-none">
+          {/* Header Overlay */}
+          <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 pointer-events-auto">
+            <h1 className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight flex items-center">
+              <span className="bg-blue-600 text-white p-1 rounded mr-2 h-6 w-6 flex items-center justify-center text-sm font-mono italic">S</span>
+              System Design Simulator
+            </h1>
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Interactive Scaling & Bottleneck Simulator</p>
+          </header>
 
-        {/* Bottleneck Overlay Panel */}
-        <div className="absolute top-4 left-64 z-10 w-80 ml-4">
-           <BottleneckPanel />
+          {/* Bottleneck Overlay Panel */}
+          <div className="w-80 pointer-events-auto">
+             <BottleneckPanel />
+          </div>
         </div>
 
         {/* React Flow Canvas */}

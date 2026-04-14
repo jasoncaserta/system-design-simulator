@@ -14,9 +14,9 @@ import type {
 import type { SimulationStore, SimulationParams, NodeData, NodeType, NodeStatus } from './types';
 
 const INITIAL_PARAMS: SimulationParams = {
-  users: 1000,
+  users: 500,
   rpsPerUser: 0.1,
-  readWriteRatio: 0.8,
+  readWriteRatio: 1.0,
   cacheHitRate: 0.8,
 };
 
@@ -30,25 +30,25 @@ const getStarterNodes = (): Node<NodeData>[] => [
   {
     id: 'lb',
     type: 'custom',
-    position: { x: 200, y: 150 },
+    position: { x: 250, y: 150 },
     data: { type: 'lb', label: 'Load Balancer', instances: 1, maxCapacityPerInstance: 250, currentLoad: 0, status: 'healthy' },
   },
   {
     id: 'app',
     type: 'custom',
-    position: { x: 400, y: 150 },
+    position: { x: 500, y: 150 },
     data: { type: 'app', label: 'App Servers', instances: 1, maxCapacityPerInstance: 50, currentLoad: 0, status: 'healthy' },
   },
   {
     id: 'cache',
     type: 'custom',
-    position: { x: 600, y: 50 },
+    position: { x: 750, y: 50 },
     data: { type: 'cache', label: 'Redis Cache', instances: 1, maxCapacityPerInstance: 500, currentLoad: 0, status: 'healthy' },
   },
   {
     id: 'db',
     type: 'custom',
-    position: { x: 600, y: 250 },
+    position: { x: 750, y: 250 },
     data: { type: 'db', label: 'Postgres DB', instances: 1, maxCapacityPerInstance: 25, currentLoad: 0, status: 'healthy' },
   },
 ];
