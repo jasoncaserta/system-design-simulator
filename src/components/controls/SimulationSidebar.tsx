@@ -91,7 +91,7 @@ export const SimulationSidebar = () => {
 
         <div>
           <label className="flex justify-between text-sm font-semibold mb-2 text-slate-900 dark:text-white">
-            <span>Requests per User</span>
+            <span>Requests per User (RPS)</span>
             <span className="font-mono text-blue-600 dark:text-white font-bold">{rpsPerUser.toFixed(2)}</span>
           </label>
           <input 

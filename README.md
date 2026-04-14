@@ -44,7 +44,7 @@ The simulator uses realistic, production-grade performance benchmarks for its de
 
 The simulator uses a **Steady-State Mathematical Model** to calculate instantaneous load across the system graph:
 
-1.  **Traffic Generation**: `Total QPS = Concurrent Users * Requests Per User`.
+1.  **Traffic Generation**: `Total QPS = Concurrent Users * Requests Per User (RPS)`.
 2.  **Starter System**: Launches with **1,000 users** at **0.1 RPS** (100 total QPS) across **1 App Server**.
 3.  **Data Flow**:
     - **Read Traffic**: `Total QPS * Read Ratio`. Distributed to Cache.
