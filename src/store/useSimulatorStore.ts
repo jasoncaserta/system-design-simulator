@@ -20,74 +20,61 @@ const INITIAL_PARAMS: SimulationParams = {
   cacheHitRate: 0.8,
 };
 
-const getStarterNodes = (): Node<NodeData>[] => [
-  {
-    id: 'client',
-    type: 'custom',
-    position: { x: 0, y: 150 },
-    data: { type: 'client', label: 'Clients', instances: 1, maxCapacityPerInstance: 1000000, currentLoad: 0, status: 'healthy' },
-  },
-  {
-    id: 'lb',
-    type: 'custom',
-    position: { x: 250, y: 150 },
-    data: { type: 'lb', label: 'Load Balancer', instances: 1, maxCapacityPerInstance: 250, currentLoad: 0, status: 'healthy' },
-  },
-  {
-    id: 'app',
-    type: 'custom',
-    position: { x: 500, y: 150 },
-    data: { type: 'app', label: 'App Servers', instances: 1, maxCapacityPerInstance: 50, currentLoad: 0, status: 'healthy' },
-  },
-  {
-    id: 'cache',
-    type: 'custom',
-    position: { x: 750, y: 50 },
-    data: { type: 'cache', label: 'Redis Cache', instances: 1, maxCapacityPerInstance: 500, currentLoad: 0, status: 'healthy' },
-  },
-  {
-    id: 'db',
-    type: 'custom',
-    position: { x: 750, y: 250 },
-    data: { type: 'db', label: 'Postgres DB', instances: 1, maxCapacityPerInstance: 25, currentLoad: 0, status: 'healthy' },
-  },
-];
+const INITIAL_COUNTS = {
+  client: 1,
+  lb: 1,
+  app: 1,
+  cache: 1,
+  db: 1,
+};
 
-const starterEdges: Edge[] = [
-  { id: 'e-client-lb', source: 'client', target: 'lb' },
-  { id: 'e-lb-app', source: 'lb', target: 'app' },
-  { id: 'e-app-cache', source: 'app', target: 'cache' },
-  { id: 'e-app-db', source: 'app', target: 'db' },
+const INITIAL_CAPACITIES = {
+  client: 1000000,
+  lb: 250,
+  app: 50,
+  cache: 500,
+  db: 25,
+};
+
+const LAYERS = [
+  { id: 'client', type: 'client', label: 'Clients', x: 0, y: 150 },
+  { id: 'lb', type: 'lb', label: 'Load Balancer', x: 250, y: 150 },
+  { id: 'app', type: 'app', label: 'App Server', x: 500, y: 150 },
+  { id: 'cache', type: 'cache', label: 'Redis Cache', x: 750, y: 50 },
+  { id: 'db', type: 'db', label: 'Postgres DB', x: 750, y: 250 },
 ];
 
 export const useSimulatorStore = create<SimulationStore>((set, get) => ({
   ...INITIAL_PARAMS,
-  nodes: getStarterNodes(),
-  edges: starterEdges,
+  nodeCounts: { ...INITIAL_COUNTS },
+  nodeCapacities: { ...INITIAL_CAPACITIES },
+  nodes: [],
+  edges: [],
 
   updateSimParams: (params) => {
     set(params);
     get().runSimulation();
   },
 
-  updateNodeInstances: (nodeId, instances) => {
+  updateNodeInstances: (tierId, instances) => {
+    // Check if the tier exists in our counts
+    const cleanTierId = tierId.split('-')[0]; // Handle exploded IDs
     set((state) => ({
-      nodes: state.nodes.map((node) => 
-        node.id === nodeId 
-          ? { ...node, data: { ...node.data, instances: Math.max(1, instances) } }
-          : node
-      ),
+      nodeCounts: {
+        ...state.nodeCounts,
+        [cleanTierId]: Math.max(1, instances)
+      }
     }));
     get().runSimulation();
   },
 
-  updateNodeCapacity: (nodeId, capacity) => {
+  updateNodeCapacity: (tierId, capacity) => {
+    const cleanTierId = tierId.split('-')[0];
     set((state) => ({
-      nodes: state.nodes.map((node) => 
-        node.id === nodeId 
-          ? { ...node, data: { ...node.data, maxCapacityPerInstance: Math.max(1, capacity) } }
-          : node
-      ),
+      nodeCapacities: {
+        ...state.nodeCapacities,
+        [cleanTierId]: Math.max(1, capacity)
+      }
     }));
     get().runSimulation();
   },
@@ -113,68 +100,122 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
 
   loadStarterSystem: () => {
     set({
-      nodes: getStarterNodes(),
-      edges: starterEdges,
+      nodeCounts: { ...INITIAL_COUNTS },
+      nodeCapacities: { ...INITIAL_CAPACITIES },
       ...INITIAL_PARAMS,
     });
     get().runSimulation();
   },
 
   runSimulation: () => {
-    const { nodes, edges, users, rpsPerUser, readWriteRatio, cacheHitRate } = get();
-    
-    // 1. Calculate base load
+    const { users, rpsPerUser, readWriteRatio, cacheHitRate, nodeCounts, nodeCapacities } = get();
     const totalQps = users * rpsPerUser;
-
-    // 2. Map nodes for easy lookup and reset load
-    const nodeMap = new Map(nodes.map(n => [n.id, { ...n.data, currentLoad: 0 }]));
     
-    // 3. Simple Flow Propagation (assuming Starter System structure for MVP logic)
-    // In a full implementation, we'd use BFS/DFS on the graph.
-    
-    // Client -> LB
-    const clientNode = nodeMap.get('client');
-    if (clientNode) clientNode.currentLoad = totalQps;
+    // 1. Generate Exploded Nodes
+    const newNodes: Node<NodeData>[] = [];
+    const tierInstances: Record<string, string[]> = {};
 
-    const lbNode = nodeMap.get('lb');
-    if (lbNode) lbNode.currentLoad = totalQps;
-
-    const appNode = nodeMap.get('app');
-    if (appNode) appNode.currentLoad = totalQps;
-
-    const cacheNode = nodeMap.get('cache');
-    if (cacheNode) {
-      // Cache only sees read traffic
-      cacheNode.currentLoad = totalQps * readWriteRatio;
-    }
-
-    const dbNode = nodeMap.get('db');
-    if (dbNode) {
-      const readTraffic = totalQps * readWriteRatio;
-      const writeTraffic = totalQps * (1 - readWriteRatio);
-      const cacheMisses = readTraffic * (1 - cacheHitRate);
-      dbNode.currentLoad = writeTraffic + cacheMisses;
-    }
-
-    // 4. Update Node Statuses
-    const updatedNodes = nodes.map(node => {
-      const data = nodeMap.get(node.id);
-      if (!data) return node;
-
-      const totalCapacity = data.instances * data.maxCapacityPerInstance;
-      const loadRatio = data.currentLoad / totalCapacity;
-
-      let status: NodeStatus = 'healthy';
-      if (loadRatio > 1.0) status = 'overloaded';
-      else if (loadRatio > 0.8) status = 'stressed';
-      else if (data.currentLoad === 0) status = 'idle';
-
-      return {
-        ...node,
-        data: { ...data, status }
-      };
+    LAYERS.forEach(layer => {
+      const count = nodeCounts[layer.id] || 1;
+      tierInstances[layer.id] = [];
+      
+      for (let i = 0; i < count; i++) {
+        const id = count > 1 ? `${layer.id}-${i}` : layer.id;
+        tierInstances[layer.id].push(id);
+        
+        const yOffset = count > 1 ? (i - (count - 1) / 2) * 120 : 0;
+        
+        newNodes.push({
+          id,
+          type: 'custom',
+          position: { x: layer.x, y: layer.y + yOffset },
+          data: {
+            type: layer.type as NodeType,
+            label: count > 1 ? `${layer.label} ${i + 1}` : layer.label,
+            instances: 1,
+            maxCapacityPerInstance: nodeCapacities[layer.id],
+            currentLoad: 0,
+            status: 'healthy'
+          }
+        });
+      }
     });
 
-    set({ nodes: updatedNodes });
+    // 2. Distribute Load
+    const nodeMap = new Map(newNodes.map(n => [n.id, n]));
+
+    // Client -> LB
+    const clientIds = tierInstances['client'];
+    const lbIds = tierInstances['lb'];
+    clientIds.forEach(id => {
+      const node = nodeMap.get(id);
+      if (node) node.data.currentLoad = totalQps / clientIds.length;
+    });
+
+    lbIds.forEach(id => {
+      const node = nodeMap.get(id);
+      if (node) node.data.currentLoad = totalQps / lbIds.length;
+    });
+
+    // LB -> App
+    const appIds = tierInstances['app'];
+    appIds.forEach(id => {
+      const node = nodeMap.get(id);
+      if (node) node.data.currentLoad = totalQps / appIds.length;
+    });
+
+    // App -> Cache/DB
+    const cacheIds = tierInstances['cache'];
+    const dbIds = tierInstances['db'];
+    
+    const readTraffic = totalQps * readWriteRatio;
+    const writeTraffic = totalQps * (1 - readWriteRatio);
+    const cacheMisses = readTraffic * (1 - cacheHitRate);
+    const dbTotalTraffic = writeTraffic + cacheMisses;
+
+    cacheIds.forEach(id => {
+      const node = nodeMap.get(id);
+      if (node) node.data.currentLoad = (readTraffic) / cacheIds.length;
+    });
+
+    dbIds.forEach(id => {
+      const node = nodeMap.get(id);
+      if (node) node.data.currentLoad = dbTotalTraffic / dbIds.length;
+    });
+
+    // 3. Update Statuses
+    newNodes.forEach(node => {
+      const loadRatio = node.data.currentLoad / node.data.maxCapacityPerInstance;
+      if (loadRatio > 1.0) node.data.status = 'overloaded';
+      else if (loadRatio > 0.8) node.data.status = 'stressed';
+      else if (node.data.currentLoad === 0) node.data.status = 'idle';
+      else node.data.status = 'healthy';
+    });
+
+    // 4. Generate Edges
+    const newEdges: Edge[] = [];
+    
+    // Helper to connect tiers
+    const connectTiers = (sourceTier: string, targetTier: string) => {
+      const sources = tierInstances[sourceTier];
+      const targets = tierInstances[targetTier];
+      sources.forEach(s => {
+        targets.forEach(t => {
+          newEdges.push({
+            id: `e-${s}-${t}`,
+            source: s,
+            target: t,
+            animated: nodeMap.get(s)?.data.status !== 'idle'
+          });
+        });
+      });
+    };
+
+    connectTiers('client', 'lb');
+    connectTiers('lb', 'app');
+    connectTiers('app', 'cache');
+    connectTiers('app', 'db');
+
+    set({ nodes: newNodes, edges: newEdges });
   },
 }));

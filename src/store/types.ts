@@ -22,6 +22,8 @@ export interface SimulationParams {
 export interface SimulationStore extends SimulationParams {
   nodes: Node<NodeData>[];
   edges: Edge[];
+  nodeCounts: Record<string, number>;
+  nodeCapacities: Record<string, number>;
   
   // Actions
   updateSimParams: (params: Partial<SimulationParams>) => void;

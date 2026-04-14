@@ -30,49 +30,72 @@ const StatusColors = {
 export const CustomNode = memo(({ data }: NodeProps<NodeData>) => {
   const Icon = IconMap[data.type] || Server;
   const statusColor = StatusColors[data.status];
+  const isCluster = data.instances > 1;
 
   return (
-    <div className={cn(
-      'px-4 py-2 shadow-md rounded-md border-2 w-[200px]',
-      statusColor
-    )}>
-      <Handle type="target" position={Position.Left} className="w-2 h-2 !bg-gray-400" />
-      
-      <div className="flex items-center">
-        <div className="rounded-full p-2 bg-white dark:bg-gray-800 shadow-sm mr-2">
-          <Icon size={16} className={cn(
-            data.status === 'overloaded' ? 'text-red-500' : 
-            data.status === 'stressed' ? 'text-yellow-500' : 'text-blue-500'
-          )} />
-        </div>
-        <div className="ml-2">
-          <div className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider">{data.label}</div>
-          <div className="text-[10px] text-gray-500 dark:text-gray-400">
-            {data.instances} {data.instances === 1 ? 'instance' : 'instances'}
+    <div className="relative">
+      <div className={cn(
+        'px-4 py-2 shadow-lg rounded-md border-2 w-[200px] bg-white dark:bg-gray-900 transition-all duration-300',
+        statusColor,
+        isCluster ? 'border-b-4' : ''
+      )}>
+        {/* Instance Indicator Grid (replaces stacking) */}
+        {isCluster && (
+          <div className="flex flex-wrap gap-1 mb-2 border-b border-gray-100 dark:border-gray-800 pb-1.5">
+            {Array.from({ length: Math.min(data.instances, 12) }).map((_, i) => (
+              <div 
+                key={i} 
+                className={cn(
+                  "w-1.5 h-1.5 rounded-full",
+                  data.status === 'overloaded' ? 'bg-red-400' : 
+                  data.status === 'stressed' ? 'bg-yellow-400' : 'bg-blue-400'
+                )} 
+              />
+            ))}
+            {data.instances > 12 && (
+              <span className="text-[8px] font-bold text-gray-400">+{data.instances - 12}</span>
+            )}
+          </div>
+        )}
+
+        <Handle type="target" position={Position.Left} className="w-2 h-2 !bg-gray-400" />
+        
+        <div className="flex items-center">
+          <div className="rounded-full p-2 bg-white dark:bg-gray-800 shadow-sm mr-2 border border-gray-100 dark:border-gray-800">
+            <Icon size={16} className={cn(
+              data.status === 'overloaded' ? 'text-red-500' : 
+              data.status === 'stressed' ? 'text-yellow-500' : 'text-blue-500'
+            )} />
+          </div>
+          <div className="ml-2">
+            <div className="text-xs font-black text-gray-900 dark:text-gray-100 uppercase tracking-wider">{data.label}</div>
+            <div className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-tight">
+              {data.instances} {data.instances === 1 ? 'instance' : 'instances'}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex justify-between items-center">
-          <span className="text-[10px] text-gray-500 uppercase">Load</span>
-          <span className="text-xs font-mono font-bold">
-            {data.currentLoad.toFixed(1)} <span className="text-[8px] font-normal uppercase">Queries / Sec</span>
-          </span>
+        <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Load</span>
+            <span className="text-xs font-mono font-bold">
+              {data.currentLoad.toFixed(1)} <span className="text-[8px] font-normal uppercase">Queries / Sec</span>
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-1 overflow-hidden">
+            <div 
+              className={cn(
+                "h-full rounded-full transition-all duration-500",
+                data.status === 'overloaded' ? 'bg-red-500' : 
+                data.status === 'stressed' ? 'bg-yellow-500' : 'bg-green-500'
+              )}
+              style={{ width: `${Math.min(100, (data.currentLoad / (data.instances * data.maxCapacityPerInstance)) * 100)}%` }}
+            />
+          </div>
         </div>
-        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 mt-1">
-          <div 
-            className={cn(
-              "h-1 rounded-full transition-all duration-500",
-              data.status === 'overloaded' ? 'bg-red-500' : 
-              data.status === 'stressed' ? 'bg-yellow-500' : 'bg-green-500'
-            )}
-            style={{ width: `${Math.min(100, (data.currentLoad / (data.instances * data.maxCapacityPerInstance)) * 100)}%` }}
-          />
-        </div>
-      </div>
 
-      <Handle type="source" position={Position.Right} className="w-2 h-2 !bg-gray-400" />
+        <Handle type="source" position={Position.Right} className="w-2 h-2 !bg-gray-400" />
+      </div>
     </div>
   );
 });

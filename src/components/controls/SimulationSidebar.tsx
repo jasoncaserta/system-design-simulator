@@ -1,6 +1,13 @@
 import React from 'react';
 import { useSimulatorStore } from '../../store/useSimulatorStore';
 
+const INFRA_LAYERS = [
+  { id: 'lb', label: 'Load Balancer', type: 'lb' },
+  { id: 'app', label: 'App Servers', type: 'app' },
+  { id: 'cache', label: 'Redis Cache', type: 'cache' },
+  { id: 'db', label: 'Postgres DB', type: 'db' },
+];
+
 export const SimulationSidebar = () => {
   const { 
     users, 
@@ -8,28 +15,29 @@ export const SimulationSidebar = () => {
     readWriteRatio, 
     cacheHitRate, 
     updateSimParams,
-    nodes,
+    nodeCounts,
+    nodeCapacities,
     updateNodeInstances,
     updateNodeCapacity
   } = useSimulatorStore();
 
   const getBaseCapacity = (type: string) => {
     switch (type) {
-      case 'lb': return 500;
-      case 'app': return 100;
-      case 'cache': return 1000;
-      case 'db': return 50;
+      case 'lb': return 250;
+      case 'app': return 50;
+      case 'cache': return 500;
+      case 'db': return 25;
       default: return 100;
     }
   };
 
-  const getInstanceSize = (node: any) => {
-    const base = getBaseCapacity(node.data.type);
-    const current = node.data.maxCapacityPerInstance;
+  const getInstanceSize = (tierId: string) => {
+    const base = getBaseCapacity(tierId);
+    const current = nodeCapacities[tierId];
     const ratio = current / base;
-    if (ratio <= 0.5) return 'small';
-    if (ratio <= 1.0) return 'medium';
-    if (ratio <= 2.0) return 'large';
+    if (ratio <= 0.51) return 'small';
+    if (ratio <= 1.01) return 'medium';
+    if (ratio <= 2.01) return 'large';
     return 'xlarge';
   };
 
@@ -123,20 +131,20 @@ export const SimulationSidebar = () => {
       <section className="space-y-4 border-t border-gray-100 dark:border-gray-800 pt-8">
         <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em]">Infrastructure</h3>
         
-        {nodes.filter(n => n.id !== 'client').map(node => (
-          <div key={node.id} className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-100 dark:border-gray-800">
+        {INFRA_LAYERS.map(layer => (
+          <div key={layer.id} className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-100 dark:border-gray-800">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-bold text-slate-700 dark:text-white">{node.data.label}</span>
+              <span className="text-sm font-bold text-slate-700 dark:text-white">{layer.label}</span>
               <div className="flex items-center space-x-2">
                 <button 
-                  onClick={() => updateNodeInstances(node.id, node.data.instances - 1)}
+                  onClick={() => updateNodeInstances(layer.id, (nodeCounts[layer.id] || 1) - 1)}
                   className="w-6 h-6 flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-sm hover:bg-gray-50 text-slate-900 dark:text-white"
                 >
                   -
                 </button>
-                <span className="text-sm font-mono w-4 text-center font-bold text-slate-900 dark:text-white">{node.data.instances}</span>
+                <span className="text-sm font-mono w-4 text-center font-bold text-slate-900 dark:text-white">{nodeCounts[layer.id] || 1}</span>
                 <button 
-                  onClick={() => updateNodeInstances(node.id, node.data.instances + 1)}
+                  onClick={() => updateNodeInstances(layer.id, (nodeCounts[layer.id] || 1) + 1)}
                   className="w-6 h-6 flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-sm hover:bg-gray-50 text-slate-900 dark:text-white"
                 >
                   +
@@ -147,10 +155,10 @@ export const SimulationSidebar = () => {
             <div className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400">
               <span className="uppercase font-semibold">Instance Size</span>
               <select 
-                value={getInstanceSize(node)}
+                value={getInstanceSize(layer.id)}
                 onChange={(e) => {
                   const multiplier = e.target.value === 'small' ? 0.5 : e.target.value === 'medium' ? 1.0 : e.target.value === 'large' ? 2.0 : 4.0;
-                  updateNodeCapacity(node.id, getBaseCapacity(node.data.type) * multiplier);
+                  updateNodeCapacity(layer.id, getBaseCapacity(layer.id) * multiplier);
                 }}
                 className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-1 py-0.5 text-[10px] font-bold text-slate-900 dark:text-white"
               >
