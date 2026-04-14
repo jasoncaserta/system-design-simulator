@@ -1,4 +1,4 @@
-import { getBezierPath, MarkerType } from 'reactflow';
+import { getBezierPath } from 'reactflow';
 import type { EdgeProps } from 'reactflow';
 import type { EdgeData } from '../../store/types';
 

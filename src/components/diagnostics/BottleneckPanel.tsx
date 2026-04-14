@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSimulatorStore } from '../../store/useSimulatorStore';
-import { AlertTriangle, CheckCircle, Info, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 
 export const BottleneckPanel = () => {
   const { nodes } = useSimulatorStore();

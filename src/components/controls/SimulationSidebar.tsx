@@ -22,11 +22,11 @@ export const SimulationSidebar = () => {
 
   const getBaseCapacity = (type: string) => {
     switch (type) {
-      case 'lb': return 250;
-      case 'app': return 50;
-      case 'cache': return 500;
-      case 'db': return 25;
-      default: return 100;
+      case 'lb': return 10000;
+      case 'app': return 500;
+      case 'cache': return 50000;
+      case 'db': return 1000;
+      default: return 1000;
     }
   };
 
@@ -70,9 +70,9 @@ export const SimulationSidebar = () => {
           </label>
           <input 
             type="range" 
-            min="100" 
-            max="50000" 
-            step="100"
+            min="1000" 
+            max="1000000" 
+            step="1000"
             value={users}
             onChange={(e) => updateSimParams({ users: parseInt(e.target.value) })}
             className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"

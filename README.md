@@ -23,17 +23,38 @@ An interactive, frontend-first backend architecture simulator built with **React
 - **Icons**: Lucide React
 - **Build Tool**: Vite 8
 
+## 📊 Production Scale Benchmarks
+
+The simulator uses realistic, production-grade performance benchmarks for its default infrastructure capacities:
+
+| Component       | Base Capacity (Medium) | Real-World Equivalent           |
+|-----------------|------------------------|---------------------------------|
+| **Load Balancer** | 10,000 RPS           | Nginx / AWS ALB                 |
+| **App Server**   | 500 RPS                | Node.js / Go / FastAPI CRUD     |
+| **Redis Cache**  | 50,000 RPS             | Single-node Redis (In-Memory)   |
+| **Postgres DB**  | 1,000 RPS              | Indexed SQL CRUD Operations     |
+
+### Scaling Tiers
+- **Small**: 0.5x Base Capacity
+- **Medium**: 1.0x Base Capacity (Default)
+- **Large**: 2.0x Base Capacity
+- **X-Large**: 4.0x Base Capacity
+
 ## 🧠 Simulation Logic
 
 The simulator uses a **Steady-State Mathematical Model** to calculate instantaneous load across the system graph:
 
-1.  **Total QPS**: `Concurrent Users * Requests Per Second Per User`.
-2.  **Load Balancing**: Traffic is distributed equally across all instances of a component.
+1.  **Traffic Generation**: `Total QPS = Concurrent Users * Requests Per User`.
+2.  **Starter System**: Launches with **10,000 users** at **0.1 RPS** (1,000 total QPS) across **3 App Servers**.
 3.  **Data Flow**:
-    - **Read Traffic**: Routed from App Servers to Cache. Cache hits reduce DB load; cache misses fall through to the Database.
-    - **Write Traffic**: Routed directly from App Servers to the Database.
+    - **Read Traffic**: `Total QPS * Read Ratio`. Distributed to Cache.
+    - **Cache Misses**: `Read Traffic * (1 - Cache Hit Rate)`. Fall through to Database.
+    - **Write Traffic**: `Total QPS * (1 - Read Ratio)`. Routed directly to Database.
 4.  **Capacity**: `Node Total Capacity = Instance Count * Capacity Per Instance Size`.
-5.  **Health**: `Status = (Current Load / Total Capacity)`. Status is 'Overloaded' if ratio > 1.0.
+5.  **Health States**:
+    - **Healthy**: Load < 80%
+    - **Stressed**: Load 80% - 100% (Yellow)
+    - **Overloaded**: Load > 100% (Red)
 
 ## 🏁 Getting Started
 

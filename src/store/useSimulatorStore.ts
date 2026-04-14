@@ -3,7 +3,6 @@ import {
   addEdge, 
   applyNodeChanges, 
   applyEdgeChanges,
-  MarkerType,
 } from 'reactflow';
 import type { 
   Connection, 
@@ -15,26 +14,26 @@ import type {
 import type { SimulationStore, SimulationParams, NodeData, EdgeData, NodeType } from './types';
 
 const INITIAL_PARAMS: SimulationParams = {
-  users: 100,
+  users: 10000,
   rpsPerUser: 0.1,
-  readWriteRatio: 1.0,
+  readWriteRatio: 0.8,
   cacheHitRate: 0.8,
 };
 
 const INITIAL_COUNTS = {
   client: 1,
   lb: 1,
-  app: 1,
+  app: 3,
   cache: 1,
   db: 1,
 };
 
 const INITIAL_CAPACITIES = {
   client: 1000000,
-  lb: 125,
-  app: 25,
-  cache: 250,
-  db: 12.5,
+  lb: 10000,
+  app: 500,
+  cache: 50000,
+  db: 1000,
 };
 
 const LAYERS = [
@@ -127,7 +126,7 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
     const newNodes: Node<NodeData>[] = [];
     const tierInstances: Record<string, string[]> = {};
 
-    columns.forEach((layersInCol, x) => {
+    columns.forEach((layersInCol) => {
       // Calculate total height of this column
       let totalColHeight = 0;
       const layerHeights = layersInCol.map(layer => {
