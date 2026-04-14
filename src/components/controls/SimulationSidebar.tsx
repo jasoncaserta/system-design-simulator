@@ -40,6 +40,20 @@ export const SimulationSidebar = () => {
     return 'xlarge';
   };
 
+  const SIZES = [
+    { label: 'small', mult: 0.5 },
+    { label: 'medium', mult: 1.0 },
+    { label: 'large', mult: 2.0 },
+    { label: 'xlarge', mult: 4.0 },
+  ];
+
+  const changeInstanceSize = (layerId: string, delta: number) => {
+    const currentSize = getInstanceSize(layerId);
+    const currentIndex = SIZES.findIndex(s => s.label === currentSize);
+    const nextIndex = Math.max(0, Math.min(SIZES.length - 1, currentIndex + delta));
+    updateNodeCapacity(layerId, getBaseCapacity(layerId) * SIZES[nextIndex].mult);
+  };
+
   return (
     <div className="w-80 h-full bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 p-6 overflow-y-auto text-slate-900 dark:text-white">
       <h2 className="text-xl font-bold mb-8 text-slate-900 dark:text-white border-b pb-4 border-gray-100 dark:border-gray-800 uppercase tracking-tight">
@@ -152,20 +166,24 @@ export const SimulationSidebar = () => {
             </div>
 
             <div className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400">
-              <span className="uppercase font-semibold">Instance Size</span>
-              <select 
-                value={getInstanceSize(layer.id)}
-                onChange={(e) => {
-                  const multiplier = e.target.value === 'small' ? 0.5 : e.target.value === 'medium' ? 1.0 : e.target.value === 'large' ? 2.0 : 4.0;
-                  updateNodeCapacity(layer.id, getBaseCapacity(layer.id) * multiplier);
-                }}
-                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-1 py-0.5 text-[10px] font-bold text-slate-900 dark:text-white"
-              >
-                <option value="small">Small (0.5x)</option>
-                <option value="medium">Medium (1.0x)</option>
-                <option value="large">Large (2.0x)</option>
-                <option value="xlarge">X-Large (4.0x)</option>
-              </select>
+              <span className="uppercase font-semibold tracking-wider">Instance Size</span>
+              <div className="flex items-center space-x-2">
+                <button 
+                  onClick={() => changeInstanceSize(layer.id, -1)}
+                  className="w-5 h-5 flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-sm hover:bg-gray-50 text-slate-900 dark:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                  disabled={getInstanceSize(layer.id) === 'small'}
+                >
+                  -
+                </button>
+                <span className="text-[10px] font-bold uppercase w-12 text-center text-slate-900 dark:text-white">{getInstanceSize(layer.id)}</span>
+                <button 
+                  onClick={() => changeInstanceSize(layer.id, 1)}
+                  className="w-5 h-5 flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-sm hover:bg-gray-50 text-slate-900 dark:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                  disabled={getInstanceSize(layer.id) === 'xlarge'}
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
         ))}

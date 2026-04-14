@@ -31,10 +31,10 @@ const INITIAL_COUNTS = {
 
 const INITIAL_CAPACITIES = {
   client: 1000000,
-  lb: 250,
-  app: 50,
-  cache: 500,
-  db: 25,
+  lb: 125,
+  app: 25,
+  cache: 250,
+  db: 12.5,
 };
 
 const LAYERS = [
