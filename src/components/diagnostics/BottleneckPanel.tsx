@@ -1,81 +1,96 @@
+import { useState } from 'react';
 import { useSimulatorStore } from '../../store/useSimulatorStore';
-import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Info, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 
 export const BottleneckPanel = () => {
   const { nodes } = useSimulatorStore();
+  const [isOpen, setIsOpen] = useState(false);
 
   const overloadedNodes = nodes.filter(n => n.data.status === 'overloaded');
   const stressedNodes = nodes.filter(n => n.data.status === 'stressed');
+  const totalWarnings = overloadedNodes.length + stressedNodes.length;
 
-  if (overloadedNodes.length === 0 && stressedNodes.length === 0) {
+  const getRecommendation = (nodeId: string) => {
+    const baseId = nodeId.split('-')[0];
+    switch (baseId) {
+      case 'lb': return "Increase Load Balancer capacity or add more instances.";
+      case 'app': return "Add more App Server instances or increase CPU/RAM.";
+      case 'cache': return "Increase cache size or improve hit rate.";
+      case 'db': return "Add DB replicas, shard, or scale vertically.";
+      default: return "Review capacity and scale accordingly.";
+    }
+  };
+
+  if (totalWarnings === 0) {
     return (
-      <div className="bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 p-4 shadow-sm backdrop-blur-sm">
-        <div className="flex items-center">
-          <CheckCircle className="text-green-500 mr-4 shrink-0" size={24} />
-          <div className="flex-1 flex justify-between items-center">
-            <p className="text-sm text-green-700 dark:text-green-400 font-black uppercase tracking-wider">System Healthy</p>
-            <p className="text-xs text-green-600 dark:text-green-300 font-bold uppercase tracking-tight bg-green-100 dark:bg-green-900/50 px-2 py-0.5 rounded">
-              All nodes operating within capacity
-            </p>
-          </div>
-        </div>
+      <div className="bg-green-500/10 dark:bg-green-900/20 backdrop-blur-md border border-green-500/20 rounded-xl p-3 shadow-lg flex items-center space-x-3 w-fit">
+        <CheckCircle className="text-green-500 shrink-0" size={18} />
+        <span className="text-xs font-black text-green-700 dark:text-green-400 uppercase tracking-wider">System Healthy</span>
       </div>
     );
   }
 
-  const getRecommendation = (nodeId: string) => {
-    switch (nodeId) {
-      case 'lb': return "Increase Load Balancer capacity or add more LB instances if your cloud provider allows.";
-      case 'app': return "Horizontal scaling: Add more App Server instances to distribute the CPU/Memory load.";
-      case 'cache': return "Increase cache size, use a larger instance type, or improve the cache hit rate to reduce the amount of data stored.";
-      case 'db': return "Read scaling: Add DB replicas and improve cache hit rate. Write scaling: Sharding or moving to a more performant DB engine.";
-      default: return "Review the node's capacity and consider scaling vertically or horizontally.";
-    }
-  };
-
   return (
-    <div className="space-y-4">
-      {overloadedNodes.map(node => (
-        <div key={node.id} className="bg-red-50 dark:bg-red-950/30 border-l-4 border-red-500 p-4 shadow-sm backdrop-blur-sm">
-          <div className="flex items-start">
-            <AlertTriangle className="text-red-500 mr-4 shrink-0 mt-1" size={24} />
-            <div className="flex-1">
-              <div className="flex justify-between items-baseline mb-2">
-                <p className="text-sm text-red-700 dark:text-red-400 font-black uppercase tracking-wider">CRITICAL: {node.data.label} Overloaded</p>
-                <span className="text-xs font-mono font-bold text-red-800 dark:text-red-300 bg-red-100 dark:bg-red-900/50 px-2 py-0.5 rounded uppercase">
-                  {node.data.currentLoad.toFixed(1)} / {(node.data.instances * node.data.maxCapacityPerInstance).toFixed(0)} Queries / Sec
+    <div className="w-full flex flex-col pointer-events-auto">
+      {/* Dropdown Header */}
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center justify-between p-3 rounded-xl shadow-lg transition-all duration-300 border backdrop-blur-md ${
+          overloadedNodes.length > 0 
+            ? 'bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400' 
+            : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-700 dark:text-yellow-400'
+        }`}
+      >
+        <div className="flex items-center space-x-3">
+          {overloadedNodes.length > 0 ? (
+            <AlertCircle className="shrink-0 animate-pulse" size={20} />
+          ) : (
+            <AlertTriangle className="shrink-0" size={20} />
+          )}
+          <div className="text-left">
+            <p className="text-xs font-black uppercase tracking-widest">
+              {overloadedNodes.length > 0 ? 'Critical Bottlenecks' : 'System Warnings'}
+            </p>
+            <p className="text-[10px] font-bold opacity-80 uppercase">
+              {totalWarnings} {totalWarnings === 1 ? 'Node' : 'Nodes'} requiring attention
+            </p>
+          </div>
+        </div>
+        {isOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+      </button>
+
+      {/* Dropdown Content */}
+      {isOpen && (
+        <div className="mt-2 space-y-2 max-h-[400px] overflow-y-auto pr-1">
+          {overloadedNodes.map(node => (
+            <div key={node.id} className="bg-red-500/10 dark:bg-red-950/40 border border-red-500/20 p-3 rounded-lg backdrop-blur-md">
+              <div className="flex justify-between items-start mb-1">
+                <span className="text-[11px] font-black uppercase text-red-700 dark:text-red-400">{node.data.label} Overloaded</span>
+                <span className="text-[10px] font-mono font-bold bg-red-500/20 px-1.5 py-0.5 rounded text-red-800 dark:text-red-300">
+                  {((node.data.currentLoad / (node.data.instances * node.data.maxCapacityPerInstance)) * 100).toFixed(0)}%
                 </span>
               </div>
-              <div className="bg-white/40 dark:bg-black/20 p-3 rounded text-xs text-red-900 dark:text-red-200 border border-red-200/50 dark:border-red-800/50">
-                <span className="font-bold uppercase text-[10px] mr-2 opacity-70">Recommended Fix:</span>
+              <p className="text-[10px] text-red-900/80 dark:text-red-200/60 font-medium italic">
                 {getRecommendation(node.id)}
-              </div>
+              </p>
             </div>
-          </div>
-        </div>
-      ))}
+          ))}
 
-      {overloadedNodes.length === 0 && stressedNodes.map(node => (
-        <div key={node.id} className="bg-yellow-50 dark:bg-yellow-950/30 border-l-4 border-yellow-500 p-4 shadow-sm backdrop-blur-sm">
-          <div className="flex items-center">
-            <Info className="text-yellow-500 mr-4 shrink-0" size={24} />
-            <div className="flex-1 flex justify-between items-center">
-              <p className="text-sm text-yellow-700 dark:text-yellow-400 font-black uppercase tracking-wider">{node.data.label} Stressed</p>
-              <div className="flex items-center space-x-4">
-                <p className="text-xs text-yellow-600 dark:text-yellow-300 font-bold">
-                  Load: {((node.data.currentLoad / (node.data.instances * node.data.maxCapacityPerInstance)) * 100).toFixed(0)}%
-                </p>
-                <div className="w-24 bg-yellow-200 dark:bg-yellow-900/50 h-1.5 rounded-full overflow-hidden">
-                  <div 
-                    className="bg-yellow-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${(node.data.currentLoad / (node.data.instances * node.data.maxCapacityPerInstance)) * 100}%` }}
-                  />
-                </div>
+          {stressedNodes.map(node => (
+            <div key={node.id} className="bg-yellow-500/10 dark:bg-yellow-950/40 border border-yellow-500/20 p-3 rounded-lg backdrop-blur-md">
+              <div className="flex justify-between items-start mb-1">
+                <span className="text-[11px] font-black uppercase text-yellow-700 dark:text-yellow-400">{node.data.label} Stressed</span>
+                <span className="text-[10px] font-mono font-bold bg-yellow-500/20 px-1.5 py-0.5 rounded text-yellow-800 dark:text-yellow-300">
+                  {((node.data.currentLoad / (node.data.instances * node.data.maxCapacityPerInstance)) * 100).toFixed(0)}%
+                </span>
               </div>
+              <p className="text-[10px] text-yellow-900/80 dark:text-yellow-200/60 font-medium italic">
+                {getRecommendation(node.id)}
+              </p>
             </div>
-          </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 };

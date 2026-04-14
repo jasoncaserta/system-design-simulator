@@ -112,34 +112,63 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
     const { users, rpsPerUser, readWriteRatio, cacheHitRate, nodeCounts, nodeCapacities } = get();
     const totalQps = users * rpsPerUser;
     
-    // 1. Generate Exploded Nodes
+    // 1. Group layers by X-column to calculate dynamic Y positions
+    const columns = new Map<number, typeof LAYERS>();
+    LAYERS.forEach(layer => {
+      const col = columns.get(layer.x) || [];
+      col.push(layer);
+      columns.set(layer.x, col);
+    });
+
+    const INSTANCE_SPACING = 160;
+    const TIER_GAP = 100;
+    const TARGET_CENTER_Y = 200;
+
     const newNodes: Node<NodeData>[] = [];
     const tierInstances: Record<string, string[]> = {};
 
-    LAYERS.forEach(layer => {
-      const count = nodeCounts[layer.id] || 1;
-      tierInstances[layer.id] = [];
-      
-      for (let i = 0; i < count; i++) {
-        const id = count > 1 ? `${layer.id}-${i}` : layer.id;
-        tierInstances[layer.id].push(id);
+    columns.forEach((layersInCol, x) => {
+      // Calculate total height of this column
+      let totalColHeight = 0;
+      const layerHeights = layersInCol.map(layer => {
+        const count = nodeCounts[layer.id] || 1;
+        const h = count * INSTANCE_SPACING;
+        totalColHeight += h;
+        return h;
+      });
+      totalColHeight += (layersInCol.length - 1) * TIER_GAP;
+
+      // Start placing from top
+      let currentY = TARGET_CENTER_Y - totalColHeight / 2;
+
+      layersInCol.forEach((layer, idx) => {
+        const count = nodeCounts[layer.id] || 1;
+        const layerHeight = layerHeights[idx];
+        const layerCenterY = currentY + layerHeight / 2;
         
-        const yOffset = count > 1 ? (i - (count - 1) / 2) * 160 : 0;
-        
-        newNodes.push({
-          id,
-          type: 'custom',
-          position: { x: layer.x, y: layer.y + yOffset },
-          data: {
-            type: layer.type as NodeType,
-            label: count > 1 ? `${layer.label} ${i + 1}` : layer.label,
-            instances: 1,
-            maxCapacityPerInstance: nodeCapacities[layer.id],
-            currentLoad: 0,
-            status: 'healthy'
-          }
-        });
-      }
+        tierInstances[layer.id] = [];
+        for (let i = 0; i < count; i++) {
+          const id = count > 1 ? `${layer.id}-${i}` : layer.id;
+          tierInstances[layer.id].push(id);
+          
+          const yOffset = (i - (count - 1) / 2) * INSTANCE_SPACING;
+          
+          newNodes.push({
+            id,
+            type: 'custom',
+            position: { x: layer.x, y: layerCenterY + yOffset },
+            data: {
+              type: layer.type as NodeType,
+              label: count > 1 ? `${layer.label} ${i + 1}` : layer.label,
+              instances: 1,
+              maxCapacityPerInstance: nodeCapacities[layer.id],
+              currentLoad: 0,
+              status: 'healthy'
+            }
+          });
+        }
+        currentY += layerHeight + TIER_GAP;
+      });
     });
 
     // 2. Distribute Load
