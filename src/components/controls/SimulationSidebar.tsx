@@ -112,6 +112,23 @@ export const SimulationSidebar = () => {
               {formatK(users * rpsPerUser)}
             </span>
           </div>
+          <div className="mt-2 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100/50 dark:border-blue-800/30 rounded-lg p-2.5">
+            <p className="text-[10px] uppercase font-black tracking-widest text-blue-500/80 dark:text-blue-400/80 mb-0.5">
+              Traffic Magnitude
+            </p>
+            <p className="text-xs font-bold text-slate-700 dark:text-blue-200">
+              {(() => {
+                const qps = users * rpsPerUser;
+                if (qps >= 1000000) return "🚀 Netflix API Scale";
+                if (qps >= 150000) return "🔥 Google Search Scale";
+                if (qps >= 75000) return "📚 Wikipedia Total Scale";
+                if (qps >= 10000) return "🐦 X (Twitter) Writes Scale";
+                if (qps >= 2500) return "💻 Stack Overflow Scale";
+                if (qps >= 500) return "🏢 Large Enterprise Scale";
+                return "🏠 Boutique Shop Scale";
+              })()}
+            </p>
+          </div>
         </div>
       </section>
 
