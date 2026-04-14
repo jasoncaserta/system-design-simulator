@@ -14,7 +14,7 @@ import type {
 import type { SimulationStore, SimulationParams, NodeData, EdgeData, NodeType } from './types';
 
 const INITIAL_PARAMS: SimulationParams = {
-  users: 10000,
+  users: 1000,
   rpsPerUser: 0.1,
   readWriteRatio: 0.8,
   cacheHitRate: 0.8,
@@ -23,17 +23,17 @@ const INITIAL_PARAMS: SimulationParams = {
 const INITIAL_COUNTS = {
   client: 1,
   lb: 1,
-  app: 3,
+  app: 1,
   cache: 1,
   db: 1,
 };
 
 const INITIAL_CAPACITIES = {
   client: 1000000,
-  lb: 10000,
-  app: 500,
-  cache: 50000,
-  db: 1000,
+  lb: 5000,
+  app: 250,
+  cache: 25000,
+  db: 500,
 };
 
 const LAYERS = [

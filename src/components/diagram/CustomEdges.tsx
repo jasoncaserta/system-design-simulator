@@ -1,6 +1,7 @@
 import { getBezierPath } from 'reactflow';
 import type { EdgeProps } from 'reactflow';
 import type { EdgeData } from '../../store/types';
+import { formatK } from '../../utils/format';
 
 export const CustomEdge = ({
   id,
@@ -41,13 +42,6 @@ export const CustomEdge = ({
     sourceX + (targetX - sourceX) * 0.5,
     sourceY + (targetY - sourceY) * 0.5,
   ];
-
-  const formatQps = (val: number) => {
-    if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
-    if (val >= 1000) return `${(val / 1000).toFixed(1)}k`;
-    if (val < 1 && val > 0) return val.toFixed(2);
-    return val.toFixed(1);
-  };
 
   // Determine number of packets based on QPS
   const packetCount = qps > 0 ? Math.min(5, Math.max(1, Math.floor(Math.log10(qps + 1) * 2))) : 0;
@@ -103,7 +97,7 @@ export const CustomEdge = ({
             <div className="flex items-center justify-center h-full">
               <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm px-2 py-0.5 rounded-full shadow-md border border-blue-200 dark:border-blue-800 flex items-center space-x-1 scale-90">
                 <span className="text-[10px] font-mono font-black text-blue-600 dark:text-blue-400 whitespace-nowrap">
-                  {formatQps(qps)}
+                  {formatK(qps)}
                 </span>
                 <span className="text-[7px] font-bold text-gray-400 uppercase tracking-tighter">QPS</span>
               </div>

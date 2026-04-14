@@ -1,4 +1,5 @@
 import { useSimulatorStore } from '../../store/useSimulatorStore';
+import { formatK } from '../../utils/format';
 
 const INFRA_LAYERS = [
   { id: 'lb', label: 'Load Balancer', type: 'lb' },
@@ -63,20 +64,29 @@ export const SimulationSidebar = () => {
       <section className="space-y-6 mb-10">
         <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em]">Global Traffic</h3>
         
-        <div>
-          <label className="flex justify-between text-sm font-semibold mb-2 text-slate-900 dark:text-white">
-            <span>Concurrent Users</span>
-            <span className="font-mono text-blue-600 dark:text-white font-bold">{users.toLocaleString()}</span>
+        <div className="flex justify-between items-center">
+          <label className="text-sm font-semibold text-slate-900 dark:text-white">
+            Concurrent Users
           </label>
-          <input 
-            type="range" 
-            min="1000" 
-            max="1000000" 
-            step="1000"
-            value={users}
-            onChange={(e) => updateSimParams({ users: parseInt(e.target.value) })}
-            className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
-          />
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={() => updateSimParams({ users: Math.max(1000, users / 10) })}
+              className="w-6 h-6 flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-sm hover:bg-gray-50 text-slate-900 dark:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+              disabled={users <= 1000}
+            >
+              -
+            </button>
+            <span className="font-mono text-blue-600 dark:text-white font-bold text-sm w-20 text-center">
+              {formatK(users)}
+            </span>
+            <button 
+              onClick={() => updateSimParams({ users: Math.min(1000000, users * 10) })}
+              className="w-6 h-6 flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-sm hover:bg-gray-50 text-slate-900 dark:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+              disabled={users >= 1000000}
+            >
+              +
+            </button>
+          </div>
         </div>
 
         <div>
@@ -99,7 +109,7 @@ export const SimulationSidebar = () => {
           <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
             <span>Total Queries Per Second:</span>
             <span className="font-mono font-bold text-gray-700 dark:text-white text-sm">
-              {(users * rpsPerUser).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+              {formatK(users * rpsPerUser)}
             </span>
           </div>
         </div>

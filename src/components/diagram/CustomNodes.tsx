@@ -5,6 +5,7 @@ import type { NodeData } from '../../store/types';
 import { Server, Users, HardDrive, Database, Layers, MessageSquare, Activity } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { formatK } from '../../utils/format';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -94,7 +95,7 @@ export const CustomNode = memo(({ data }: NodeProps<NodeData>) => {
           </div>
           <div className="mt-1 flex justify-end">
             <span className="text-xs font-mono font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
-              {data.currentLoad.toFixed(1)} <span className="text-[9px] font-normal uppercase opacity-60 ml-0.5">Queries / Sec</span>
+              {formatK(data.currentLoad)} <span className="text-[9px] font-normal uppercase opacity-60 ml-0.5">Queries / Sec</span>
             </span>
           </div>
         </div>
