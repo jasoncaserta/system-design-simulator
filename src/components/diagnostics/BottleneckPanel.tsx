@@ -13,13 +13,18 @@ export const BottleneckPanel = () => {
   const getRecommendation = (nodeId: string) => {
     const baseId = nodeId.split('-')[0];
     switch (baseId) {
-      case 'cdn': return "Increase CDN hit rate by caching more assets at the edge.";
-      case 'lb': return "Increase Load Balancer capacity or add more instances.";
-      case 'app': return "Add more App Server instances or increase CPU/RAM.";
-      case 'cache': return "Increase cache size or improve hit rate.";
-      case 'db': return "Add DB replicas, shard, or scale vertically (SQLite limited to single-writer).";
-      case 'blob-storage': return "Increase storage throughput or optimize file access.";
-      case 'worker': return "Check if background jobs are being throttled by the API Priority Gate.";
+      case 'cdn': return "Increase edge-cache hit rate so fewer requests reach the core system.";
+      case 'lb': return "Add router capacity or spread traffic across more routing instances.";
+      case 'app': return "Scale the stateless service vertically or horizontally.";
+      case 'cache': return "Increase serving-cache capacity or improve the hit rate.";
+      case 'db': return "Reduce cache misses, lower background write pressure, or strengthen the serving database.";
+      case 'blob': return "Reduce durable-input churn or increase durable-store throughput for recovery and derived-state processing.";
+      case 'blob-storage': return "Reduce durable-input churn or increase durable-store throughput for recovery and derived-state processing.";
+      case 'worker': return "Ingestion pressure is too high; add ingest capacity or reduce upstream change volume.";
+      case 'queue': return "The scheduler is coordinating too much work at once; reduce background churn or increase orchestration capacity.";
+      case 'recompute': return "Scale the derived-state pipeline or reduce how often serving state is refreshed.";
+      case 'bootstrap': return "Recovery replay is saturating the rebuild path; increase replay capacity or reduce recovery scope.";
+      case 'history': return "Backfill work is lagging; increase deferred-processing capacity or let it trail serving traffic further.";
       default: return "Review capacity and scale accordingly.";
     }
   };

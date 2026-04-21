@@ -7,12 +7,12 @@ An interactive, frontend-first backend architecture simulator built with **React
 ## 🚀 Features
 
 - **Interactive Architecture Canvas**: Drag, drop, and connect system components visually using React Flow.
-- **Steady-State Simulation Engine**: Real-time load propagation from Clients through LBs, App Servers, Caches, and Databases.
+- **Steady-State Simulation Engine**: Real-time load propagation through DDIA-style layers such as request routing, stateless services, serving caches, durable stores, derived-state pipelines, and serving databases.
 - **Horizontal Scaling**: Add or remove instances of any component to distribute traffic.
 - **Vertical Scaling**: Choose from predefined instance sizes (Small, Medium, Large, X-Large) to increase per-node capacity.
 - **Bottleneck Diagnosis**: Intelligent overlay panel that flags overloaded components and provides tailored remediation advice.
-- **Starter Template**: Instantly load a classic "Client → LB → App → Cache → DB" architecture to begin simulating.
-- **Live Visual Metrics**: Components change color (Green → Yellow → Red) and show animated load bars based on current QPS vs. total capacity.
+- **Preset Contrast**: Switch between a simple starter system and a lifecycle-heavy `pickGPU` system that models durable inputs, derived-state refresh, recovery, and backfill flows.
+- **Live Visual Metrics**: Components change color (Green → Yellow → Red) and show animated load bars based on current work rate vs. total capacity.
 
 ## 🛠️ Tech Stack
 
@@ -27,12 +27,14 @@ An interactive, frontend-first backend architecture simulator built with **React
 
 The simulator uses realistic, production-grade performance benchmarks for its default infrastructure capacities:
 
-| Component       | Base Capacity (Medium) | Real-World Equivalent           |
-|-----------------|------------------------|---------------------------------|
-| **Load Balancer** | 10,000 RPS           | Nginx / AWS ALB                 |
-| **App Server**   | 500 RPS                | Node.js / Go / FastAPI CRUD     |
-| **Redis Cache**  | 50,000 RPS             | Single-node Redis (In-Memory)   |
-| **Postgres DB**  | 1,000 RPS              | Indexed SQL CRUD Operations     |
+| Component | Base Capacity (Medium) | Modeled Role |
+|-----------|-------------------------|--------------|
+| **Request Router** | 10,000 ops/s | Origin traffic distribution |
+| **Stateless Service** | 500 ops/s | Request-handling compute tier |
+| **Serving Cache** | 50,000 ops/s | Derived hot-path cache |
+| **Serving Database** | 1,000 ops/s | Serving-state read/write store |
+| **Derived State Pipeline** | 120 ops/s | Derived-data refresh stage |
+| **Recovery Pipeline** | 180 ops/s | Durable-input replay / recovery stage |
 
 ### Scaling Tiers
 - **Small**: 0.5x Base Capacity
@@ -45,13 +47,19 @@ The simulator uses realistic, production-grade performance benchmarks for its de
 The simulator uses a **Steady-State Mathematical Model** to calculate instantaneous load across the system graph:
 
 1.  **Traffic Generation**: `Total QPS = Concurrent Users * Requests Per User (RPS)`.
-2.  **Starter System**: Launches with **1,000 users** at **0.1 RPS** (100 total QPS) across **1 App Server**.
-3.  **Data Flow**:
-    - **Read Traffic**: `Total QPS * Read Ratio`. Distributed to Cache.
-    - **Cache Misses**: `Read Traffic * (1 - Cache Hit Rate)`. Fall through to Database.
-    - **Write Traffic**: `Total QPS * (1 - Read Ratio)`. Routed directly to Database.
-4.  **Capacity**: `Node Total Capacity = Instance Count * Capacity Per Instance Size`.
-5.  **Health States**:
+2.  **Starter System**: Launches with **1,000 users** at **0.1 RPS** (100 total QPS) across **1 Stateless Service**.
+3.  **Serving Flow**:
+    - **Edge Misses**: `Total QPS * (1 - Edge Cache Hit Rate)`.
+    - **Serving Reads**: `Edge Misses * Read/Write Ratio`.
+    - **Serving Cache Misses**: `Serving Reads * (1 - Serving Cache Hit Rate)`. Fall through to the serving database.
+4.  **Background Flow**:
+    - **Ingestion Pressure** drives upstream fetch, normalization, and durable writes.
+    - **Derived State Pressure** drives derived-state refresh from durable inputs into serving state.
+    - **Backfill Pressure** drives deferred recomputation over older data.
+    - **Recovery / Replay Load** models rebuilding serving state from durable inputs.
+5.  **Coordination**: The read-priority gate delays background writers when serving reads are high, creating backlog in lifecycle stages before pressure reaches the serving database.
+6.  **Capacity**: `Node Total Capacity = Instance Count * Capacity Per Instance Size`.
+7.  **Health States**:
     - **Healthy**: Load < 80%
     - **Stressed**: Load 80% - 100% (Yellow)
     - **Overloaded**: Load > 100% (Red)
@@ -86,11 +94,12 @@ The simulator uses a **Steady-State Mathematical Model** to calculate instantane
 ## 📖 Usage
 
 1. **Adjust Traffic**: Use the sliders in the **Global Traffic** section to increase users or RPS.
-2. **Modify Behavior**: Tweak **Read vs. Write Ratio** or **Cache Hit Rate** to see how they impact database and cache load.
-3. **Scale Your System**: 
+2. **Modify Behavior**: Tweak serving-path controls such as **Read/Write Ratio**, **Serving Cache Hit Rate**, and **Edge Cache Hit Rate**.
+3. **Model Background Work**: Adjust **Ingestion Pressure**, **Derived State Pressure**, **Backfill Pressure**, and **Recovery / Replay Load** to simulate how durable inputs turn into serving state.
+4. **Scale Your System**: 
    - Click **+** or **-** on infrastructure nodes for **Horizontal Scaling**.
    - Change the **Instance Size** dropdown for **Vertical Scaling**.
-4. **Fix Bottlenecks**: Watch the **Bottleneck Panel** for alerts when nodes turn red and follow the "Fix" recommendations.
+5. **Fix Bottlenecks**: Watch the **Bottleneck Panel** for alerts when nodes turn red and follow the "Fix" recommendations.
 
 ---
 
