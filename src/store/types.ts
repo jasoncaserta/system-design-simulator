@@ -1,6 +1,6 @@
 import type { Node, Edge } from 'reactflow';
 
-export type NodeType = 'client' | 'lb' | 'app' | 'cache' | 'db' | 'queue' | 'worker';
+export type NodeType = 'client' | 'lb' | 'app' | 'cache' | 'db' | 'queue' | 'worker' | 'cdn' | 'blob-storage';
 export type NodeStatus = 'healthy' | 'stressed' | 'overloaded' | 'idle';
 
 export interface NodeData {
@@ -21,6 +21,9 @@ export interface SimulationParams {
   rpsPerUser: number;
   readWriteRatio: number; // 0-1, e.g. 0.8 is 80% read
   cacheHitRate: number;   // 0-1
+  cdnHitRate: number;     // 0-1
+  backgroundJobLoad: number;
+  enableApiPriorityGate: boolean;
 }
 
 export interface SimulationStore extends SimulationParams {
@@ -28,6 +31,7 @@ export interface SimulationStore extends SimulationParams {
   edges: Edge<EdgeData>[];
   nodeCounts: Record<string, number>;
   nodeCapacities: Record<string, number>;
+  currentSystem: 'starter' | 'pickgpu' | 'custom';
   
   // Actions
   updateSimParams: (params: Partial<SimulationParams>) => void;
@@ -38,4 +42,5 @@ export interface SimulationStore extends SimulationParams {
   onConnect: (connection: any) => void;
   runSimulation: () => void;
   loadStarterSystem: () => void;
+  loadPickGPUSystem: () => void;
 }

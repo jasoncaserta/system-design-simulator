@@ -13,10 +13,13 @@ export const BottleneckPanel = () => {
   const getRecommendation = (nodeId: string) => {
     const baseId = nodeId.split('-')[0];
     switch (baseId) {
+      case 'cdn': return "Increase CDN hit rate by caching more assets at the edge.";
       case 'lb': return "Increase Load Balancer capacity or add more instances.";
       case 'app': return "Add more App Server instances or increase CPU/RAM.";
       case 'cache': return "Increase cache size or improve hit rate.";
-      case 'db': return "Add DB replicas, shard, or scale vertically.";
+      case 'db': return "Add DB replicas, shard, or scale vertically (SQLite limited to single-writer).";
+      case 'blob-storage': return "Increase storage throughput or optimize file access.";
+      case 'worker': return "Check if background jobs are being throttled by the API Priority Gate.";
       default: return "Review capacity and scale accordingly.";
     }
   };

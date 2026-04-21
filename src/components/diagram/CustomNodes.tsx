@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 import type { NodeProps } from 'reactflow';
 import type { NodeData } from '../../store/types';
-import { Server, Users, HardDrive, Database, Layers, MessageSquare, Activity } from 'lucide-react';
+import { Server, Users, HardDrive, Database, Layers, MessageSquare, Activity, Globe, Box } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { formatK } from '../../utils/format';
@@ -19,6 +19,8 @@ const IconMap = {
   db: Database,
   queue: MessageSquare,
   worker: HardDrive,
+  cdn: Globe,
+  'blob-storage': Box,
 };
 
 const StatusColors = {

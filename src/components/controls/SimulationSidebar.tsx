@@ -1,11 +1,20 @@
 import { useSimulatorStore } from '../../store/useSimulatorStore';
 import { formatK } from '../../utils/format';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+import { Server, HardDrive, Database, Layers, Activity, Globe, Box } from 'lucide-react';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 const INFRA_LAYERS = [
-  { id: 'lb', label: 'Load Balancer', type: 'lb' },
-  { id: 'app', label: 'App Servers', type: 'app' },
-  { id: 'cache', label: 'Redis Cache', type: 'cache' },
-  { id: 'db', label: 'Postgres DB', type: 'db' },
+  { id: 'cdn', label: 'CDN (Edge)', type: 'cdn', icon: Globe },
+  { id: 'lb', label: 'Load Balancer', type: 'lb', icon: Layers },
+  { id: 'app', label: 'App Servers', type: 'app', icon: Server },
+  { id: 'cache', label: 'Redis Cache', type: 'cache', icon: Activity },
+  { id: 'db', label: 'Postgres DB', type: 'db', icon: Database },
+  { id: 'blob-storage', label: 'Blob Storage', type: 'blob-storage', icon: Box },
 ];
 
 export const SimulationSidebar = () => {
@@ -14,26 +23,32 @@ export const SimulationSidebar = () => {
     rpsPerUser, 
     readWriteRatio, 
     cacheHitRate, 
+    cdnHitRate,
+    backgroundJobLoad,
+    enableApiPriorityGate,
     updateSimParams,
     nodeCounts,
     nodeCapacities,
     updateNodeInstances,
-    updateNodeCapacity
+    updateNodeCapacity,
   } = useSimulatorStore();
 
   const getBaseCapacity = (type: string) => {
     switch (type) {
+      case 'cdn': return 100000;
       case 'lb': return 10000;
       case 'app': return 500;
       case 'cache': return 50000;
       case 'db': return 1000;
+      case 'blob-storage': return 5000;
       default: return 1000;
     }
   };
 
   const getInstanceSize = (tierId: string) => {
-    const base = getBaseCapacity(tierId);
-    const current = nodeCapacities[tierId];
+    const cleanId = tierId.replace(/-[0-9]+$/, '');
+    const base = getBaseCapacity(cleanId);
+    const current = nodeCapacities[cleanId] || base;
     const ratio = current / base;
     if (ratio <= 0.51) return 'small';
     if (ratio <= 1.01) return 'medium';
@@ -166,6 +181,58 @@ export const SimulationSidebar = () => {
             className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
           />
         </div>
+
+        <div>
+          <label className="flex justify-between text-sm font-semibold mb-2 text-slate-900 dark:text-white">
+            <span>CDN Hit Rate</span>
+            <span className="font-mono text-blue-600 dark:text-white font-bold">{(cdnHitRate * 100).toFixed(0)}%</span>
+          </label>
+          <input 
+            type="range" 
+            min="0" 
+            max="1" 
+            step="0.05"
+            value={cdnHitRate}
+            onChange={(e) => updateSimParams({ cdnHitRate: parseFloat(e.target.value) })}
+            className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+          />
+        </div>
+
+        <div>
+          <label className="flex justify-between text-sm font-semibold mb-2 text-slate-900 dark:text-white">
+            <span>Background Job Load</span>
+            <span className="font-mono text-blue-600 dark:text-white font-bold">{backgroundJobLoad.toFixed(0)} QPS</span>
+          </label>
+          <input 
+            type="range" 
+            min="0" 
+            max="500" 
+            step="10"
+            value={backgroundJobLoad}
+            onChange={(e) => updateSimParams({ backgroundJobLoad: parseFloat(e.target.value) })}
+            className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-semibold text-slate-900 dark:text-white">
+            API Priority Gate
+          </label>
+          <button 
+            onClick={() => updateSimParams({ enableApiPriorityGate: !enableApiPriorityGate })}
+            className={cn(
+              "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+              enableApiPriorityGate ? "bg-blue-600" : "bg-gray-200 dark:bg-gray-700"
+            )}
+          >
+            <span
+              className={cn(
+                "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                enableApiPriorityGate ? "translate-x-6" : "translate-x-1"
+              )}
+            />
+          </button>
+        </div>
       </section>
 
       <section className="space-y-4 border-t border-gray-100 dark:border-gray-800 pt-8">
@@ -174,7 +241,10 @@ export const SimulationSidebar = () => {
         {INFRA_LAYERS.map(layer => (
           <div key={layer.id} className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-100 dark:border-gray-800">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-bold text-slate-700 dark:text-white">{layer.label}</span>
+              <div className="flex items-center space-x-2">
+                <layer.icon size={14} className="text-slate-400" />
+                <span className="text-sm font-bold text-slate-700 dark:text-white">{layer.label}</span>
+              </div>
               <div className="flex items-center space-x-2">
                 <button 
                   onClick={() => updateNodeInstances(layer.id, (nodeCounts[layer.id] || 1) - 1)}
