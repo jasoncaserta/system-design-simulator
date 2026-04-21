@@ -1,16 +1,20 @@
+import { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 import type { NodeProps } from 'reactflow';
 import type { NodeData } from '../../store/types';
 import { useSimulatorStore } from '../../store/useSimulatorStore';
 import { NodeConfigPanel } from './NodeControls';
 import { Server, Users, HardDrive, Database, Layers, MessageSquare, Activity, Globe, Box, RefreshCcw, History, RotateCw } from 'lucide-react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { cn } from '../../utils/cn';
 import { formatK } from '../../utils/format';
 
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+// Handle position constants
+const HANDLE_POS = {
+  UPPER: '34%',
+  LOWER: '70%',
+  LEFT_THIRD: '32%',
+  RIGHT_THIRD: '68%',
+} as const;
 
 const IconMap = {
   client: Users,
@@ -34,7 +38,7 @@ const StatusColors = {
   idle: 'border-gray-300 bg-gray-50 dark:bg-gray-800/20',
 };
 
-export const CustomNode = ({ id, data }: NodeProps<NodeData>) => {
+const CustomNodeInner = ({ id, data }: NodeProps<NodeData>) => {
   const { showNodeConfig, updateImplementationLabel } = useSimulatorStore();
   const Icon = IconMap[data.type] || Server;
   const statusColor = StatusColors[data.status];
@@ -50,18 +54,21 @@ export const CustomNode = ({ id, data }: NodeProps<NodeData>) => {
       <Handle id="target-top" type="target" position={Position.Top} className={handleClassName} />
       <Handle id="target-right" type="target" position={Position.Right} className={handleClassName} />
       <Handle id="target-bottom" type="target" position={Position.Bottom} className={handleClassName} />
-      <Handle id="target-left-upper" type="target" position={Position.Left} className={handleClassName} style={{ top: '34%' }} />
-      <Handle id="target-left-lower" type="target" position={Position.Left} className={handleClassName} style={{ top: '70%' }} />
-      <Handle id="target-right-upper" type="target" position={Position.Right} className={handleClassName} style={{ top: '34%' }} />
-      <Handle id="target-right-lower" type="target" position={Position.Right} className={handleClassName} style={{ top: '70%' }} />
-      <Handle id="target-top-left" type="target" position={Position.Top} className={handleClassName} style={{ left: '32%' }} />
-      <Handle id="target-top-right" type="target" position={Position.Top} className={handleClassName} style={{ left: '68%' }} />
-      {isDerivedStateNode && (
+      {isDerivedStateNode ? (
         <>
-          <Handle id="target-derived-top-left" type="target" position={Position.Top} className={handleClassName} style={{ left: '32%' }} />
-          <Handle id="target-derived-top-right" type="target" position={Position.Top} className={handleClassName} style={{ left: '68%' }} />
-          <Handle id="target-derived-left-upper" type="target" position={Position.Left} className={handleClassName} style={{ top: '34%' }} />
-          <Handle id="target-derived-left-lower" type="target" position={Position.Left} className={handleClassName} style={{ top: '70%' }} />
+          <Handle id="target-derived-top-left" type="target" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.LEFT_THIRD }} />
+          <Handle id="target-derived-top-right" type="target" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.RIGHT_THIRD }} />
+          <Handle id="target-derived-left-upper" type="target" position={Position.Left} className={handleClassName} style={{ top: HANDLE_POS.UPPER }} />
+          <Handle id="target-derived-left-lower" type="target" position={Position.Left} className={handleClassName} style={{ top: HANDLE_POS.LOWER }} />
+        </>
+      ) : (
+        <>
+          <Handle id="target-left-upper" type="target" position={Position.Left} className={handleClassName} style={{ top: HANDLE_POS.UPPER }} />
+          <Handle id="target-left-lower" type="target" position={Position.Left} className={handleClassName} style={{ top: HANDLE_POS.LOWER }} />
+          <Handle id="target-right-upper" type="target" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.UPPER }} />
+          <Handle id="target-right-lower" type="target" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.LOWER }} />
+          <Handle id="target-top-left" type="target" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.LEFT_THIRD }} />
+          <Handle id="target-top-right" type="target" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.RIGHT_THIRD }} />
         </>
       )}
 
@@ -146,16 +153,19 @@ export const CustomNode = ({ id, data }: NodeProps<NodeData>) => {
       <Handle id="source-top" type="source" position={Position.Top} className={handleClassName} />
       <Handle id="source-right" type="source" position={Position.Right} className={handleClassName} />
       <Handle id="source-bottom" type="source" position={Position.Bottom} className={handleClassName} />
-      <Handle id="source-right-upper" type="source" position={Position.Right} className={handleClassName} style={{ top: '34%' }} />
-      <Handle id="source-right-lower" type="source" position={Position.Right} className={handleClassName} style={{ top: '70%' }} />
-      <Handle id="source-top-left" type="source" position={Position.Top} className={handleClassName} style={{ left: '32%' }} />
-      <Handle id="source-top-right" type="source" position={Position.Top} className={handleClassName} style={{ left: '68%' }} />
+      <Handle id="source-right-upper" type="source" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.UPPER }} />
+      <Handle id="source-right-lower" type="source" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.LOWER }} />
+      <Handle id="source-top-left" type="source" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.LEFT_THIRD }} />
+      <Handle id="source-top-right" type="source" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.RIGHT_THIRD }} />
       {isDerivedStateNode && (
         <>
-          <Handle id="source-derived-top-left" type="source" position={Position.Top} className={handleClassName} style={{ left: '32%' }} />
-          <Handle id="source-derived-right-upper" type="source" position={Position.Right} className={handleClassName} style={{ top: '34%' }} />
+          <Handle id="source-derived-top-left" type="source" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.LEFT_THIRD }} />
+          <Handle id="source-derived-right-upper" type="source" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.UPPER }} />
         </>
       )}
     </div>
   );
 };
+
+export const CustomNode = memo(CustomNodeInner);
+CustomNode.displayName = 'CustomNode';

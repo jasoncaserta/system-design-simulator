@@ -1,5 +1,6 @@
 import { useSimulatorStore } from '../../store/useSimulatorStore';
 import { formatK } from '../../utils/format';
+import { getServingMagnitude } from '../../utils/servingMagnitude';
 
 export const SimulationSidebar = () => {
   const {
@@ -31,15 +32,7 @@ export const SimulationSidebar = () => {
             Serving Magnitude
           </p>
           <p className="text-xs font-bold text-slate-700 dark:text-blue-200">
-            {(() => {
-              const qps = users * rpsPerUser;
-              if (qps >= 1000000) return 'Global API Front Door';
-              if (qps >= 150000) return 'High-Traffic Consumer Product';
-              if (qps >= 25000) return 'Internet-Scale Niche Service';
-              if (qps >= 5000) return 'Healthy Public Data Product';
-              if (qps >= 1000) return 'Focused Production Deployment';
-              return 'Low-Traffic Specialized Service';
-            })()}
+            {getServingMagnitude(users * rpsPerUser)}
           </p>
         </div>
 

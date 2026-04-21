@@ -7,18 +7,13 @@ import ReactFlow, {
   useNodesInitialized,
   useReactFlow
 } from 'reactflow';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import 'reactflow/dist/style.css';
 import { useSimulatorStore } from '../../store/useSimulatorStore';
 import { CustomNode } from './CustomNodes';
 import { CustomEdge } from './CustomEdges';
-import { formatK } from '../../utils/format';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import { cn } from '../../utils/cn';
+import { getServingMagnitude } from '../../utils/servingMagnitude';
 
 const nodeTypes = {
   custom: CustomNode,
@@ -105,22 +100,15 @@ export const SystemCanvasInner = () => {
               Serving Magnitude
             </p>
             <p className="text-[11px] font-bold text-slate-700 dark:text-blue-200">
-              {(() => {
-                const qps = users * rpsPerUser;
-                if (qps >= 1000000) return 'Global API Front Door';
-                if (qps >= 150000) return 'High-Traffic Consumer Product';
-                if (qps >= 25000) return 'Internet-Scale Niche Service';
-                if (qps >= 5000) return 'Healthy Public Data Product';
-                if (qps >= 1000) return 'Focused Production Deployment';
-                return 'Low-Traffic Specialized Service';
-              })()}
+              {getServingMagnitude(users * rpsPerUser)}
             </p>
           </div>
           <button
             onClick={toggleNodeConfig}
-            className="w-full mt-2 py-1.5 px-3 rounded text-[10px] font-bold uppercase tracking-wider transition-colors bg-blue-600 text-white hover:bg-blue-700"
+            className="w-full mt-2 py-1.5 px-3 rounded text-[10px] font-bold uppercase tracking-wider transition-colors bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1.5"
           >
-            ⚙️ {showNodeConfig ? 'Hide' : 'Show'} Node Configuration
+            <Settings size={12} />
+            {showNodeConfig ? 'Hide' : 'Show'} Node Configuration
           </button>
         </Panel>
         <Panel position="top-right" className="bg-white dark:bg-gray-800 p-2 rounded shadow-md border border-gray-200 dark:border-gray-700 pointer-events-auto flex flex-col space-y-2 w-52">

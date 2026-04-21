@@ -188,19 +188,19 @@ export const NodeConfigPanel = ({ nodeType, tierId }: { nodeType: NodeType; tier
       {nodeType !== 'client' && (
         <>
           <Stepper
-            label="Instances"
-            value={String(count)}
-            onDecrement={() => updateNodeInstances(cleanId, count - 1)}
-            onIncrement={() => updateNodeInstances(cleanId, count + 1)}
-            disableMin={count <= 1}
-          />
-          <Stepper
             label="Size"
             value={size}
             onDecrement={() => changeSize(-1)}
             onIncrement={() => changeSize(1)}
             disableMin={sizeIndex <= 0}
             disableMax={sizeIndex >= sizes.length - 1}
+          />
+          <Stepper
+            label="Instances"
+            value={String(count)}
+            onDecrement={() => updateNodeInstances(cleanId, count - 1)}
+            onIncrement={() => updateNodeInstances(cleanId, count + 1)}
+            disableMin={count <= 1}
           />
         </>
       )}

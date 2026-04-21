@@ -459,7 +459,8 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
     distribute(nodeMap, 'bootstrap', bootstrapReplayLoad);
     distribute(nodeMap, 'history', historicalRebuildPressure);
 
-    const totalAppCapacity = (nodeCounts.app * nodeCapacities.app) || 1;
+    const rawAppCapacity = nodeCounts.app * nodeCapacities.app;
+    const totalAppCapacity = Number.isFinite(rawAppCapacity) && rawAppCapacity > 0 ? rawAppCapacity : 1;
     const apiReadPressure = servingReads / totalAppCapacity;
     let gateDrainShare = 1;
     let backgroundStatus: NodeStatus = 'healthy';
