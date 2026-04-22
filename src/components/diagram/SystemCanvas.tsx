@@ -52,7 +52,7 @@ export const SystemCanvasInner = () => {
   // Initial simulation run
   useEffect(() => {
     runSimulation();
-  }, []);
+  }, [runSimulation]);
 
   useEffect(() => {
     if (!nodesInitialized || nodes.length === 0) return;

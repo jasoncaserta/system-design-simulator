@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { getBezierPath, getSmoothStepPath } from 'reactflow';
 import type { EdgeProps } from 'reactflow';
 import type { EdgeData } from '../../store/types';
@@ -16,8 +15,6 @@ export const CustomEdge = ({
   markerEnd,
   data,
 }: EdgeProps<EdgeData>) => {
-  const [showPackets, setShowPackets] = useState(false);
-
   const throughput = data?.throughput || 0;
   const kind = data?.kind || 'request';
   const isRequestEdge = kind === 'request';
@@ -40,16 +37,6 @@ export const CustomEdge = ({
         borderRadius: 20,
         offset: 28,
       });
-
-  useEffect(() => {
-    setShowPackets(false);
-    const frame = requestAnimationFrame(() => {
-      setShowPackets(true);
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-    };
-  }, [id, edgePath]);
 
   const palette = isRequestEdge
     ? {
@@ -91,8 +78,8 @@ export const CustomEdge = ({
         markerEnd={markerEnd}
       />
 
-      {throughput > 0 && showPackets && (
-        <>
+      {throughput > 0 && (
+        <g key={`${id}-${edgePath}`}>
           {/* Forward traffic / movement */}
           {Array.from({ length: packetCount }).map((_, i) => (
             <circle key={`p-fwd-${i}`} r={Math.min(4, 2 + Math.log10(throughput + 1))} fill={palette.forwardFill}>
@@ -141,8 +128,8 @@ export const CustomEdge = ({
               </div>
             </div>
           </foreignObject>
-        </>
+        </g>
       )}
     </>
   );
-  };
+};

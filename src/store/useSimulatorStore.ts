@@ -22,9 +22,12 @@ import type {
   JobCost,
   BackfillMode,
   RecoveryMode,
+  ReplicationMode,
 } from './types';
 
-const CORE_TIERS = new Set(['client', 'lb', 'app', 'cache', 'db']);
+const BACKGROUND_TIERS = new Set(['message-queue', 'worker', 'object-store', 'batch-processor']);
+
+const CORE_TIERS = new Set(['client', 'load-balancer', 'service', 'cache', 'relational-db']);
 
 interface LayerDef {
   id: string;
@@ -46,59 +49,70 @@ const INITIAL_PARAMS: SimulationParams = {
   readWriteRatio: 0.8,
   cacheHitRate: 0.8,
   cdnHitRate: 0,
+  cacheWorkingSetFit: 0.8,
+  cacheInvalidationRate: 0.2,
+  serviceFanout: 1,
   sourceJobTypes: 0,
   refreshCadence: 'rare',
+  queueDepth: 0.1,
   averageJobCost: 'medium',
+  retryRate: 0.05,
+  batchSize: 2,
   derivedStateCadence: 'rare',
   backfillMode: 'off',
   recoveryMode: 'off',
+  processorLag: 0.1,
+  processingMode: 'batch',
+  databaseShardCount: 1,
+  nosqlPartitionCount: 2,
+  databaseWriteLoad: 0.25,
+  relationalReplicationMode: 'leader_follower',
+  objectStoreThroughput: 0.6,
+  objectStoreScanCost: 0.2,
   maxBackgroundConcurrency: 1,
   enableApiPriorityGate: true,
 };
 
 const INITIAL_COUNTS = {
   client: 1,
-  lb: 1,
-  app: 1,
+  'load-balancer': 1,
+  service: 1,
   cache: 1,
-  db: 1,
+  'relational-db': 1,
+  'nosql-db': 0,
   cdn: 0,
-  queue: 0,
+  'message-queue': 0,
   worker: 0,
-  'blob-storage': 0,
-  recompute: 0,
-  bootstrap: 0,
-  history: 0,
+  'object-store': 0,
+  'batch-processor': 0,
 };
 
 const INITIAL_CAPACITIES = {
   client: 1000000,
-  lb: 5000,
-  app: 250,
+  'load-balancer': 5000,
+  service: 250,
   cache: 25000,
-  db: 500,
+  'relational-db': 500,
+  'nosql-db': 900,
   cdn: 100000,
-  queue: 400,
+  'message-queue': 400,
   worker: 80,
-  'blob-storage': 1500,
-  recompute: 120,
-  bootstrap: 180,
-  history: 80,
+  'object-store': 1500,
+  'batch-processor': 200,
 };
 
 const LAYERS: LayerDef[] = [
   { id: 'client', type: 'client', label: 'CLIENTS', implementationLabel: 'Browsers', x: 0, y: 0 },
   { id: 'cdn', type: 'cdn', label: 'EDGE CACHE', implementationLabel: 'Cloudflare', x: 1, y: 0 },
-  { id: 'lb', type: 'lb', label: 'REQUEST ROUTER', implementationLabel: 'Nginx', x: 2, y: 0 },
-  { id: 'queue', type: 'queue', label: 'JOB SCHEDULER', implementationLabel: 'APScheduler', x: 2, y: 1 },
-  { id: 'app', type: 'app', label: 'STATELESS SERVICE', implementationLabel: 'FastAPI + Uvicorn', x: 3, y: 0 },
-  { id: 'worker', type: 'worker', label: 'INGESTION WORKERS', implementationLabel: "Tom's + Canopy + amzpy + eBay", x: 3, y: 1 },
-  { id: 'cache', type: 'cache', label: 'SERVING CACHE', implementationLabel: 'Process Memory', x: 4, y: 0.35 },
-  { id: 'blob-storage', type: 'blob-storage', label: 'DURABLE STORE', implementationLabel: 'Export CSV Repo', x: 4, y: 1 },
-  { id: 'db', type: 'db', label: 'SERVING DATABASE', implementationLabel: 'SQLite', x: 5, y: 0 },
-  { id: 'recompute', type: 'recompute', label: 'DERIVED STATE PIPELINE', implementationLabel: 'Rescore Current Listings', x: 5, y: 1 },
-  { id: 'bootstrap', type: 'bootstrap', label: 'RECOVERY PIPELINE', implementationLabel: 'Startup Replay', x: 6, y: 0 },
-  { id: 'history', type: 'history', label: 'BACKFILL PIPELINE', implementationLabel: 'listing_history Backfill', x: 6, y: 1 },
+  { id: 'load-balancer', type: 'load-balancer', label: 'LOAD BALANCER', implementationLabel: 'Nginx', x: 2, y: 0 },
+  { id: 'message-queue', type: 'message-queue', label: 'MESSAGE QUEUE', implementationLabel: 'Kafka / RabbitMQ', x: 2, y: 0.9 },
+  { id: 'service', type: 'service', label: 'STATELESS SERVICE', implementationLabel: 'FastAPI + Uvicorn', x: 3, y: 0 },
+  { id: 'worker', type: 'worker', label: 'INGESTION WORKERS', implementationLabel: "Tom's + Canopy + amzpy + eBay", x: 3, y: 1.24 },
+  { id: 'cache', type: 'cache', label: 'SERVING CACHE', implementationLabel: 'Process Memory', x: 4, y: 0.44 },
+  { id: 'object-store', type: 'object-store', label: 'OBJECT STORE', implementationLabel: 'Export CSV Repo', x: 4, y: 1.24 },
+  { id: 'relational-db', type: 'relational-db', label: 'RELATIONAL DB', implementationLabel: 'PostgreSQL / MySQL', x: 5, y: 0 },
+  { id: 'nosql-db', type: 'nosql-db', label: 'NOSQL DB', implementationLabel: 'Cassandra / MongoDB', x: 6, y: 0.08 },
+  { id: 'batch-processor', type: 'batch-processor', label: 'BATCH PROCESSOR', implementationLabel: 'Rescore + Replay + Backfill', x: 7, y: 0.95 },
 ];
 
 const distribute = (
@@ -116,31 +130,29 @@ const sumLoads = (...loads: number[]) => loads.reduce((acc, load) => acc + load,
 const PICKGPU_NODE_COUNTS = {
   client: 1,
   cdn: 1,
-  lb: 1,
-  app: 1,
+  'load-balancer': 1,
+  service: 1,
   cache: 1,
-  db: 1,
-  queue: 1,
+  'relational-db': 1,
+  'nosql-db': 1,
+  'message-queue': 1,
   worker: 1,
-  'blob-storage': 1,
-  recompute: 1,
-  bootstrap: 1,
-  history: 1,
+  'object-store': 1,
+  'batch-processor': 1,
 } as const;
 
 const PICKGPU_NODE_CAPACITIES = {
   client: 1000000,
   cdn: 100000,
-  lb: 5000,
-  app: 200,
+  'load-balancer': 5000,
+  service: 200,
   cache: 5000,
-  db: 120,
-  queue: 40,
+  'relational-db': 120,
+  'nosql-db': 220,
+  'message-queue': 40,
   worker: 25,
-  'blob-storage': 1200,
-  recompute: 80,
-  bootstrap: 120,
-  history: 50,
+  'object-store': 1200,
+  'batch-processor': 150,
 } as const;
 
 const CADENCE_CONFIG: Record<RefreshCadence, { sourceRate: number; schedulerRate: number; derivedRate: number }> = {
@@ -172,22 +184,39 @@ const RECOVERY_MODE_CONFIG: Record<RecoveryMode, { pressure: number; schedulerRa
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
+const getRelationalReadShare = (replicationMode: ReplicationMode, hasNoSql: boolean) => {
+  if (!hasNoSql) return replicationMode === 'leader_follower' ? 0.45 : 0.75;
+  return replicationMode === 'leader_follower' ? 0.18 : 0.32;
+};
+
 const deriveBackgroundLoads = ({
   sourceJobTypes,
   refreshCadence,
+  queueDepth,
   averageJobCost,
+  retryRate,
+  batchSize,
   derivedStateCadence,
   backfillMode,
   recoveryMode,
+  processorLag,
+  processingMode,
+  objectStoreScanCost,
   maxBackgroundConcurrency,
 }: Pick<
   SimulationParams,
   | 'sourceJobTypes'
   | 'refreshCadence'
+  | 'queueDepth'
   | 'averageJobCost'
+  | 'retryRate'
+  | 'batchSize'
   | 'derivedStateCadence'
   | 'backfillMode'
   | 'recoveryMode'
+  | 'processorLag'
+  | 'processingMode'
+  | 'objectStoreScanCost'
   | 'maxBackgroundConcurrency'
 >) => {
   const cadence = CADENCE_CONFIG[refreshCadence];
@@ -196,27 +225,41 @@ const deriveBackgroundLoads = ({
   const backfill = BACKFILL_MODE_CONFIG[backfillMode];
   const recovery = RECOVERY_MODE_CONFIG[recoveryMode];
   const concurrencyFactor = clamp(0.75 + maxBackgroundConcurrency * 0.15, 0.75, 1.8);
+  const retryAmplification = 1 + retryRate * 1.8;
+  const queueDepthFactor = 1 + queueDepth * 1.2;
+  const batchEfficiency = clamp(1 + (batchSize - 1) * 0.12, 1, 1.84);
+  const lagFactor = 1 + processorLag * 1.5;
+  const scanFactor = 1 + objectStoreScanCost * 1.2;
+  const modeSchedulerFactor = processingMode === 'stream' ? 1.18 : 0.92;
+  const modeProcessorFactor = processingMode === 'stream' ? 0.88 : 1.08;
 
-  const sourceFreshnessPressure = sourceJobTypes * cadence.sourceRate * jobCost.worker * concurrencyFactor;
-  const recomputePressure = Math.max(
+  const sourceFreshnessPressure =
+    sourceJobTypes * cadence.sourceRate * jobCost.worker * concurrencyFactor * retryAmplification * queueDepthFactor / batchEfficiency;
+
+  const derivedRefreshLoad = Math.max(
     sourceJobTypes * 0.6,
-    sourceJobTypes * derivedCadence.derivedRate * jobCost.derived * 1.5 * concurrencyFactor,
-  );
-  const historicalRebuildPressure = backfill.pressure * jobCost.history * clamp(0.7 + maxBackgroundConcurrency * 0.08, 0.7, 1.3);
-  const bootstrapReplayLoad = recovery.pressure * jobCost.recovery;
+    sourceJobTypes * derivedCadence.derivedRate * jobCost.derived * 1.5 * concurrencyFactor * modeProcessorFactor,
+  ) * lagFactor * scanFactor;
+  const backfillLoad =
+    backfill.pressure *
+    jobCost.history *
+    clamp(0.7 + maxBackgroundConcurrency * 0.08, 0.7, 1.3) *
+    lagFactor *
+    scanFactor *
+    modeProcessorFactor;
+  const recoveryLoad = recovery.pressure * jobCost.recovery * lagFactor * scanFactor * modeProcessorFactor;
+  const processorLoad = sumLoads(derivedRefreshLoad, backfillLoad, recoveryLoad);
 
   const schedulerCoordinationLoad = sumLoads(
     sourceJobTypes * cadence.schedulerRate * jobCost.scheduler,
     Math.max(1, sourceJobTypes * 0.4) * derivedCadence.schedulerRate,
     backfill.schedulerRate,
     recovery.schedulerRate,
-  ) * concurrencyFactor;
+  ) * concurrencyFactor * queueDepthFactor * retryAmplification * modeSchedulerFactor / batchEfficiency;
 
   return {
     sourceFreshnessPressure,
-    recomputePressure,
-    historicalRebuildPressure,
-    bootstrapReplayLoad,
+    processorLoad,
     schedulerCoordinationLoad,
   };
 };
@@ -234,10 +277,24 @@ const buildPickGPUDefaults = () => {
     cdnHitRate: 0.9,
     sourceJobTypes: 4,
     refreshCadence: 'periodic' as const,
+    queueDepth: 0.25,
     averageJobCost: 'medium' as const,
+    retryRate: 0.06,
+    batchSize: 3,
     derivedStateCadence: 'periodic' as const,
     backfillMode: 'off' as const,
     recoveryMode: 'off' as const,
+    processorLag: 0.15,
+    processingMode: 'batch' as const,
+    cacheWorkingSetFit: 0.7,
+    cacheInvalidationRate: 0.25,
+    serviceFanout: 2,
+    databaseShardCount: 1,
+    nosqlPartitionCount: 6,
+    databaseWriteLoad: 0.35,
+    relationalReplicationMode: 'leader_follower' as const,
+    objectStoreThroughput: 0.65,
+    objectStoreScanCost: 0.25,
     maxBackgroundConcurrency: 2,
     enableApiPriorityGate: true,
   };
@@ -325,17 +382,16 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
     set({
       nodeCounts: {
         client: 1,
-        lb: 1,
-        app: 1,
+        'load-balancer': 1,
+        service: 1,
         cache: 1,
-        db: 1,
+        'relational-db': 1,
+        'nosql-db': 0,
         cdn: 0,
-        queue: 0,
+        'message-queue': 0,
         worker: 0,
-        'blob-storage': 0,
-        recompute: 0,
-        bootstrap: 0,
-        history: 0,
+        'object-store': 0,
+        'batch-processor': 0,
       },
       nodeCapacities: { ...INITIAL_CAPACITIES },
       ...INITIAL_PARAMS,
@@ -364,12 +420,26 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
       readWriteRatio,
       cacheHitRate,
       cdnHitRate,
+      cacheWorkingSetFit,
+      cacheInvalidationRate,
+      serviceFanout,
       sourceJobTypes,
       refreshCadence,
+      queueDepth,
       averageJobCost,
+      retryRate,
+      batchSize,
       derivedStateCadence,
       backfillMode,
       recoveryMode,
+      processorLag,
+      processingMode,
+      databaseShardCount,
+      nosqlPartitionCount,
+      databaseWriteLoad,
+      relationalReplicationMode,
+      objectStoreThroughput,
+      objectStoreScanCost,
       maxBackgroundConcurrency,
       enableApiPriorityGate,
       nodeCounts,
@@ -400,7 +470,14 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
           label: layer.label,
           implementationLabel: implementationLabels[layer.id] ?? layer.implementationLabel,
           instances: count,
-          maxCapacityPerInstance: nodeCapacities[layer.id],
+          maxCapacityPerInstance:
+            layer.id === 'relational-db'
+              ? nodeCapacities[layer.id] * databaseShardCount
+              : layer.id === 'nosql-db'
+                ? nodeCapacities[layer.id] * nosqlPartitionCount
+              : layer.id === 'object-store'
+                ? nodeCapacities[layer.id] * clamp(0.65 + objectStoreThroughput * 1.35, 0.65, 2)
+                : nodeCapacities[layer.id],
           currentLoad: 0,
           status: 'healthy',
         },
@@ -409,57 +486,63 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
 
     const nodeMap = new Map(newNodes.map((node) => [node.id, node]));
 
-    const edgeMisses = totalQps * (1 - cdnHitRate);
-    const servingReads = edgeMisses * readWriteRatio;
-    const nonDataApiTraffic = edgeMisses - servingReads;
-    const cacheLookups = servingReads;
-    const dbServingReads = servingReads * (1 - cacheHitRate);
+    const readTraffic = totalQps * readWriteRatio;
+    const writeTraffic = totalQps * (1 - readWriteRatio);
+    const effectiveCacheHitRate = clamp(
+      cacheHitRate * (0.55 + cacheWorkingSetFit * 0.75) * (1 - cacheInvalidationRate * 0.35),
+      0.05,
+      0.98,
+    );
+    const serviceFanoutFactor = clamp(1 + (serviceFanout - 1) * 0.35, 1, 3.5);
+    const hasNoSql = (nodeCounts['nosql-db'] || 0) > 0;
+    const relationalReadShare = getRelationalReadShare(relationalReplicationMode, hasNoSql);
+    const edgeMisses = readTraffic * (1 - cdnHitRate) + writeTraffic;
+    const servingReads = readTraffic * (1 - cdnHitRate);
+    const cacheLookups = servingReads * serviceFanoutFactor;
+    const dbServingReads = cacheLookups * (1 - effectiveCacheHitRate);
+    const relationalReadLoad = dbServingReads * relationalReadShare;
+    const nosqlReadLoad = hasNoSql ? dbServingReads - relationalReadLoad : 0;
+    const foregroundWriteLoad = writeTraffic * clamp(0.6 + databaseWriteLoad * 1.8, 0.6, 2.4);
+    const cacheInvalidationLoad = writeTraffic * cacheInvalidationRate * 0.9;
+    const nonDataApiTraffic = writeTraffic * clamp(0.4 + databaseWriteLoad * 0.8, 0.4, 1.2);
 
     const {
       sourceFreshnessPressure,
-      recomputePressure,
-      historicalRebuildPressure,
-      bootstrapReplayLoad,
+      processorLoad,
       schedulerCoordinationLoad,
     } = deriveBackgroundLoads({
       sourceJobTypes,
       refreshCadence,
+      queueDepth,
       averageJobCost,
+      retryRate,
+      batchSize,
       derivedStateCadence,
       backfillMode,
       recoveryMode,
+      processorLag,
+      processingMode,
+      objectStoreScanCost,
       maxBackgroundConcurrency,
     });
 
-    const snapshotStoreLoad = sumLoads(
-      sourceFreshnessPressure,
-      recomputePressure,
-      historicalRebuildPressure,
-      bootstrapReplayLoad,
-    );
-    const bootstrapWriteDemand = bootstrapReplayLoad;
-    const recomputeWriteDemand = recomputePressure * 0.9;
-    const historyWriteDemand = historicalRebuildPressure * 0.75;
-    const backgroundDbWriteDemand = sumLoads(
-      bootstrapWriteDemand,
-      recomputeWriteDemand,
-      historyWriteDemand,
-    );
+    const durableStoreLoad =
+      sumLoads(sourceFreshnessPressure, processorLoad) * clamp(0.7 + objectStoreScanCost * 0.6, 0.7, 1.4);
+    const backgroundDbWriteDemand = processorLoad * clamp(0.65 + databaseWriteLoad * 0.7, 0.65, 1.35);
 
     distribute(nodeMap, 'client', totalQps);
     distribute(nodeMap, 'cdn', totalQps);
-    distribute(nodeMap, 'lb', edgeMisses);
-    distribute(nodeMap, 'app', edgeMisses);
-    distribute(nodeMap, 'cache', cacheLookups);
-    distribute(nodeMap, 'db', dbServingReads + nonDataApiTraffic);
-    distribute(nodeMap, 'queue', schedulerCoordinationLoad);
+    distribute(nodeMap, 'load-balancer', edgeMisses);
+    distribute(nodeMap, 'service', edgeMisses * clamp(0.8 + serviceFanout * 0.15, 0.8, 2.4));
+    distribute(nodeMap, 'cache', cacheLookups + cacheInvalidationLoad);
+    distribute(nodeMap, 'relational-db', relationalReadLoad + nonDataApiTraffic + foregroundWriteLoad);
+    distribute(nodeMap, 'nosql-db', nosqlReadLoad + processorLoad * 0.35);
+    distribute(nodeMap, 'message-queue', schedulerCoordinationLoad);
     distribute(nodeMap, 'worker', sourceFreshnessPressure);
-    distribute(nodeMap, 'blob-storage', snapshotStoreLoad);
-    distribute(nodeMap, 'recompute', recomputePressure);
-    distribute(nodeMap, 'bootstrap', bootstrapReplayLoad);
-    distribute(nodeMap, 'history', historicalRebuildPressure);
+    distribute(nodeMap, 'object-store', durableStoreLoad);
+    distribute(nodeMap, 'batch-processor', processorLoad);
 
-    const rawAppCapacity = nodeCounts.app * nodeCapacities.app;
+    const rawAppCapacity = nodeCounts.service * nodeCapacities.service;
     const totalAppCapacity = Number.isFinite(rawAppCapacity) && rawAppCapacity > 0 ? rawAppCapacity : 1;
     const apiReadPressure = servingReads / totalAppCapacity;
     let gateDrainShare = 1;
@@ -478,24 +561,16 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
       }
     }
 
-    const actualBootstrapWrites = bootstrapWriteDemand * gateDrainShare;
-    const actualRecomputeWrites = recomputeWriteDemand * gateDrainShare;
-    const actualHistoryWrites = historyWriteDemand * gateDrainShare;
     const actualBackgroundDbTraffic = backgroundDbWriteDemand * gateDrainShare;
-
-    distribute(nodeMap, 'db', actualBackgroundDbTraffic);
+    const relationalBackgroundWriteShare = hasNoSql ? 0.45 : 1;
+    const nosqlBackgroundWriteShare = hasNoSql ? 0.55 : 0;
+    distribute(nodeMap, 'relational-db', actualBackgroundDbTraffic * relationalBackgroundWriteShare);
+    distribute(nodeMap, 'nosql-db', actualBackgroundDbTraffic * nosqlBackgroundWriteShare);
 
     newNodes.forEach((node) => {
       const totalCapacity = node.data.instances * node.data.maxCapacityPerInstance;
       const loadRatio = totalCapacity > 0 ? node.data.currentLoad / totalCapacity : 0;
-      const isBackgroundStage = (
-        node.id.startsWith('queue') ||
-        node.id.startsWith('worker') ||
-        node.id.startsWith('blob-storage') ||
-        node.id.startsWith('recompute') ||
-        node.id.startsWith('bootstrap') ||
-        node.id.startsWith('history')
-      );
+      const isBackgroundStage = BACKGROUND_TIERS.has(node.id);
 
       if (isBackgroundStage && backgroundStatus === 'overloaded') {
         node.data.status = 'overloaded';
@@ -533,26 +608,27 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
       });
     };
 
+    // Serving path
     if ((nodeCounts.cdn || 0) > 0) {
       connect('client', 'cdn', totalQps, 'request', { sourceHandle: 'source-right', targetHandle: 'target-left' });
-      connect('cdn', 'lb', edgeMisses, 'request', { sourceHandle: 'source-right', targetHandle: 'target-left' });
+      connect('cdn', 'load-balancer', edgeMisses, 'request', { sourceHandle: 'source-right', targetHandle: 'target-left' });
     } else {
-      connect('client', 'lb', totalQps, 'request', { sourceHandle: 'source-right', targetHandle: 'target-left' });
+      connect('client', 'load-balancer', totalQps, 'request', { sourceHandle: 'source-right', targetHandle: 'target-left' });
     }
-    connect('lb', 'app', edgeMisses, 'request', { sourceHandle: 'source-right', targetHandle: 'target-left' });
-    connect('app', 'cache', cacheLookups, 'request', { sourceHandle: 'source-bottom', targetHandle: 'target-left' });
-    connect('cache', 'db', dbServingReads, 'request', { sourceHandle: 'source-right', targetHandle: 'target-bottom' });
-    connect('app', 'db', nonDataApiTraffic, 'data', { sourceHandle: 'source-right', targetHandle: 'target-left' });
+    connect('load-balancer', 'service', edgeMisses, 'request', { sourceHandle: 'source-right', targetHandle: 'target-left' });
+    connect('service', 'cache', cacheLookups, 'request', { sourceHandle: 'source-bottom', targetHandle: 'target-left' });
+    connect('cache', hasNoSql ? 'nosql-db' : 'relational-db', hasNoSql ? nosqlReadLoad : dbServingReads, 'request', { sourceHandle: 'source-right', targetHandle: 'target-bottom' });
+    if (hasNoSql) {
+      connect('cache', 'relational-db', relationalReadLoad, 'request', { sourceHandle: 'source-right', targetHandle: 'target-top-left' });
+    }
+    connect('service', 'relational-db', sumLoads(nonDataApiTraffic, foregroundWriteLoad), 'data', { sourceHandle: 'source-right', targetHandle: 'target-left' });
 
-    connect('queue', 'worker', sourceFreshnessPressure, 'data', { sourceHandle: 'source-right', targetHandle: 'target-left' });
-    connect('worker', 'blob-storage', sourceFreshnessPressure, 'data', { sourceHandle: 'source-right', targetHandle: 'target-left' });
-    connect('queue', 'recompute', recomputePressure, 'data', { sourceHandle: 'source-top', targetHandle: 'target-derived-left-upper' });
-    connect('blob-storage', 'recompute', recomputePressure, 'data', { sourceHandle: 'source-right', targetHandle: 'target-derived-left-lower' });
-    connect('blob-storage', 'bootstrap', bootstrapReplayLoad, 'data', { sourceHandle: 'source-top', targetHandle: 'target-bottom' });
-    connect('blob-storage', 'history', historicalRebuildPressure, 'data', { sourceHandle: 'source-bottom', targetHandle: 'target-left' });
-    connect('history', 'db', actualHistoryWrites, 'data', { sourceHandle: 'source-top', targetHandle: 'target-bottom' });
-    connect('recompute', 'db', actualRecomputeWrites, 'data', { sourceHandle: 'source-derived-right-upper', targetHandle: 'target-bottom' });
-    connect('bootstrap', 'db', actualBootstrapWrites, 'data', { sourceHandle: 'source-left', targetHandle: 'target-right' });
+    // Background pipeline
+    connect('message-queue', 'worker', sourceFreshnessPressure, 'data', { sourceHandle: 'source-right', targetHandle: 'target-left' });
+    connect('worker', 'object-store', sourceFreshnessPressure, 'data', { sourceHandle: 'source-right', targetHandle: 'target-left' });
+    connect('message-queue', 'batch-processor', processorLoad, 'data', { sourceHandle: 'source-right-upper', targetHandle: 'target-left-upper' });
+    connect('object-store', 'batch-processor', processorLoad, 'data', { sourceHandle: 'source-right', targetHandle: 'target-left-lower' });
+    connect('batch-processor', hasNoSql ? 'nosql-db' : 'relational-db', processorLoad, 'data', { sourceHandle: 'source-top-left', targetHandle: 'target-bottom' });
 
     set({ nodes: newNodes, edges: newEdges });
   },

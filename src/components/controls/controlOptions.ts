@@ -1,28 +1,38 @@
 export const cadenceOptions = [
-  { value: 'rare', label: 'Rare', description: 'Runs occasionally on loose freshness targets.' },
-  { value: 'periodic', label: 'Periodic', description: 'Runs on a normal production refresh cadence.' },
-  { value: 'frequent', label: 'Frequent', description: 'Runs often to keep derived state fresher.' },
-  { value: 'continuous', label: 'Continuous', description: 'Runs aggressively with near-constant churn.' },
+  { value: 'rare', label: 'Low', description: 'Loose freshness targets with infrequent scheduling.' },
+  { value: 'periodic', label: 'Medium', description: 'Typical production dispatch or refresh rate.' },
+  { value: 'frequent', label: 'High', description: 'Aggressive scheduling to reduce staleness.' },
+  { value: 'continuous', label: 'Hot', description: 'Near-continuous work with heavy coordination pressure.' },
 ] as const;
 
 export const jobCostOptions = [
-  { value: 'light', label: 'Light', description: 'Mostly coordination and small fetch/update work.' },
-  { value: 'medium', label: 'Medium', description: 'Balanced IO and compute per run.' },
-  { value: 'heavy', label: 'Heavy', description: 'Larger fetches, transforms, and write phases.' },
-  { value: 'very_heavy', label: 'Very Heavy', description: 'Expensive runs with substantial compute or IO.' },
+  { value: 'light', label: 'Light', description: 'Small fetch, transform, and write cost per task.' },
+  { value: 'medium', label: 'Medium', description: 'Balanced IO and compute per task.' },
+  { value: 'heavy', label: 'Heavy', description: 'Expensive fetch or transform work per task.' },
+  { value: 'very_heavy', label: 'Very Heavy', description: 'High compute or IO intensity per task.' },
 ] as const;
 
 export const backfillOptions = [
-  { value: 'off', label: 'Off', description: 'No historical catch-up beyond foreground freshness work.' },
-  { value: 'catch_up', label: 'Catch-Up', description: 'Small amount of deferred historical work.' },
-  { value: 'steady', label: 'Steady', description: 'Continuous background backfill at moderate pace.' },
-  { value: 'aggressive', label: 'Aggressive', description: 'Heavy historical catch-up that competes for capacity.' },
+  { value: 'off', label: 'Off', description: 'No historical replay beyond current freshness work.' },
+  { value: 'catch_up', label: 'Catch-Up', description: 'Light deferred historical processing.' },
+  { value: 'steady', label: 'Steady', description: 'Continuous moderate backfill pressure.' },
+  { value: 'aggressive', label: 'Aggressive', description: 'Heavy backfill that competes with foreground capacity.' },
 ] as const;
 
 export const recoveryOptions = [
-  { value: 'off', label: 'Off', description: 'Normal steady-state operation with no replay.' },
-  { value: 'startup', label: 'Startup', description: 'Some replay as serving state warms or recovers.' },
-  { value: 'rebuild', label: 'Rebuild', description: 'Large recovery or full serving-state replay.' },
+  { value: 'off', label: 'Off', description: 'No recovery replay pressure.' },
+  { value: 'startup', label: 'Startup', description: 'Moderate replay while warming serving state.' },
+  { value: 'rebuild', label: 'Rebuild', description: 'Large replay or full serving-state rebuild.' },
+] as const;
+
+export const processingModeOptions = [
+  { value: 'batch', label: 'Batch', description: 'Windowed work with more burstiness and scan-heavy processing.' },
+  { value: 'stream', label: 'Stream', description: 'Steadier low-latency processing with more coordination overhead.' },
+] as const;
+
+export const replicationModeOptions = [
+  { value: 'single_leader', label: 'Single Leader', description: 'Writes stay on one primary with limited read offload.' },
+  { value: 'leader_follower', label: 'Leader/Follower', description: 'One leader handles writes while followers absorb reads.' },
 ] as const;
 
 export const sizes = [
@@ -45,16 +55,15 @@ export const stepThroughOptions = <T extends string>(
 export const getBaseCapacity = (type: string) => {
   switch (type) {
     case 'cdn': return 100000;
-    case 'lb': return 10000;
-    case 'app': return 500;
+    case 'load-balancer': return 10000;
+    case 'service': return 500;
     case 'cache': return 50000;
-    case 'db': return 1000;
-    case 'queue': return 400;
+    case 'relational-db': return 900;
+    case 'nosql-db': return 1400;
+    case 'message-queue': return 400;
     case 'worker': return 80;
-    case 'blob-storage': return 1500;
-    case 'recompute': return 120;
-    case 'bootstrap': return 180;
-    case 'history': return 80;
+    case 'object-store': return 1500;
+    case 'batch-processor': return 200;
     default: return 1000;
   }
 };

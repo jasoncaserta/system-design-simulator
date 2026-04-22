@@ -4,7 +4,19 @@ import type { NodeProps } from 'reactflow';
 import type { NodeData } from '../../store/types';
 import { useSimulatorStore } from '../../store/useSimulatorStore';
 import { NodeConfigPanel } from './NodeControls';
-import { Server, Users, HardDrive, Database, Layers, MessageSquare, Activity, Globe, Box, RefreshCcw, History, RotateCw } from 'lucide-react';
+import {
+  Archive,
+  Cog,
+  Cpu,
+  Database,
+  DatabaseZap,
+  Gauge,
+  Globe,
+  MonitorSmartphone,
+  Router,
+  ServerCog,
+  Waypoints,
+} from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { formatK } from '../../utils/format';
 
@@ -17,18 +29,17 @@ const HANDLE_POS = {
 } as const;
 
 const IconMap = {
-  client: Users,
-  lb: Layers,
-  app: Server,
-  cache: Activity,
-  db: Database,
-  queue: MessageSquare,
-  worker: HardDrive,
+  client: MonitorSmartphone,
+  'load-balancer': Router,
+  service: ServerCog,
+  cache: Gauge,
+  'relational-db': Database,
+  'nosql-db': DatabaseZap,
+  'message-queue': Waypoints,
+  worker: Cog,
   cdn: Globe,
-  'blob-storage': Box,
-  recompute: RefreshCcw,
-  bootstrap: RotateCw,
-  history: History,
+  'object-store': Archive,
+  'batch-processor': Cpu,
 };
 
 const StatusColors = {
@@ -40,11 +51,9 @@ const StatusColors = {
 
 const CustomNodeInner = ({ id, data }: NodeProps<NodeData>) => {
   const { showNodeConfig, updateImplementationLabel } = useSimulatorStore();
-  const Icon = IconMap[data.type] || Server;
+  const Icon = IconMap[data.type] || ServerCog;
   const statusColor = StatusColors[data.status];
-  const isCluster = data.instances > 1;
   const handleClassName = "w-2 h-2 !bg-gray-400 !opacity-0";
-  const isDerivedStateNode = data.type === 'recompute';
 
   const stackLayers = Math.min(data.instances, 4) - 1; // 0-3 shadow layers behind
 
@@ -54,23 +63,12 @@ const CustomNodeInner = ({ id, data }: NodeProps<NodeData>) => {
       <Handle id="target-top" type="target" position={Position.Top} className={handleClassName} />
       <Handle id="target-right" type="target" position={Position.Right} className={handleClassName} />
       <Handle id="target-bottom" type="target" position={Position.Bottom} className={handleClassName} />
-      {isDerivedStateNode ? (
-        <>
-          <Handle id="target-derived-top-left" type="target" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.LEFT_THIRD }} />
-          <Handle id="target-derived-top-right" type="target" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.RIGHT_THIRD }} />
-          <Handle id="target-derived-left-upper" type="target" position={Position.Left} className={handleClassName} style={{ top: HANDLE_POS.UPPER }} />
-          <Handle id="target-derived-left-lower" type="target" position={Position.Left} className={handleClassName} style={{ top: HANDLE_POS.LOWER }} />
-        </>
-      ) : (
-        <>
-          <Handle id="target-left-upper" type="target" position={Position.Left} className={handleClassName} style={{ top: HANDLE_POS.UPPER }} />
-          <Handle id="target-left-lower" type="target" position={Position.Left} className={handleClassName} style={{ top: HANDLE_POS.LOWER }} />
-          <Handle id="target-right-upper" type="target" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.UPPER }} />
-          <Handle id="target-right-lower" type="target" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.LOWER }} />
-          <Handle id="target-top-left" type="target" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.LEFT_THIRD }} />
-          <Handle id="target-top-right" type="target" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.RIGHT_THIRD }} />
-        </>
-      )}
+      <Handle id="target-left-upper" type="target" position={Position.Left} className={handleClassName} style={{ top: HANDLE_POS.UPPER }} />
+      <Handle id="target-left-lower" type="target" position={Position.Left} className={handleClassName} style={{ top: HANDLE_POS.LOWER }} />
+      <Handle id="target-right-upper" type="target" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.UPPER }} />
+      <Handle id="target-right-lower" type="target" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.LOWER }} />
+      <Handle id="target-top-left" type="target" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.LEFT_THIRD }} />
+      <Handle id="target-top-right" type="target" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.RIGHT_THIRD }} />
 
       {/* Stacked card shadows for multi-instance */}
       {Array.from({ length: stackLayers }).map((_, i) => (
@@ -157,12 +155,6 @@ const CustomNodeInner = ({ id, data }: NodeProps<NodeData>) => {
       <Handle id="source-right-lower" type="source" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.LOWER }} />
       <Handle id="source-top-left" type="source" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.LEFT_THIRD }} />
       <Handle id="source-top-right" type="source" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.RIGHT_THIRD }} />
-      {isDerivedStateNode && (
-        <>
-          <Handle id="source-derived-top-left" type="source" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.LEFT_THIRD }} />
-          <Handle id="source-derived-right-upper" type="source" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.UPPER }} />
-        </>
-      )}
     </div>
   );
 };
