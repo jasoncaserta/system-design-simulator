@@ -91,6 +91,21 @@ The simulator uses a **Steady-State Mathematical Model** to calculate instantane
 
 4. Open [http://localhost:5173](http://localhost:5173) in your browser.
 
+## 🌐 Free Hosting
+
+This repo is set up to deploy to **GitHub Pages** for free.
+
+1. Push the repository to GitHub.
+2. In GitHub, open **Settings → Pages**.
+3. Under **Build and deployment**, set **Source** to **GitHub Actions**.
+4. Push to `main` (or re-run the **Deploy to GitHub Pages** workflow under **Actions**).
+
+If your repository stays at `jasoncaserta/system-design-simulator`, the site URL will be:
+
+`https://jasoncaserta.github.io/system-design-simulator/`
+
+If you rename the repository later, update the production `base` path in [vite.config.ts](/Users/jasoncaserta/Projects/sys-design-sim/vite.config.ts).
+
 ## 📖 Usage
 
 1. **Adjust Traffic**: Use the sliders in the **Global Traffic** section to increase users or RPS.
