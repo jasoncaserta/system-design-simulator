@@ -11,12 +11,19 @@ export const BottleneckPanel = () => {
   const totalWarnings = overloadedNodes.length + stressedNodes.length;
 
   const getRecommendation = (nodeId: string) => {
-    const baseId = nodeId.split('-')[0];
+    const baseId = nodeId.replace(/-\d+$/, '');
     switch (baseId) {
-      case 'lb': return "Increase Load Balancer capacity or add more instances.";
-      case 'app': return "Add more App Server instances or increase CPU/RAM.";
-      case 'cache': return "Increase cache size or improve hit rate.";
-      case 'db': return "Add DB replicas, shard, or scale vertically.";
+      case 'cdn': return "Increase edge-cache hit rate so fewer requests reach the core system.";
+      case 'load-balancer': return "Add load-balancer capacity or spread traffic across more routing instances.";
+      case 'service': return "Scale the stateless service vertically or horizontally.";
+      case 'cache': return "Increase serving-cache capacity or improve the hit rate.";
+      case 'relational-db': return "Reduce write pressure, add followers, or increase relational-database capacity.";
+      case 'nosql-db': return "Increase partitioning or cluster capacity, or reduce high-volume read traffic.";
+      case 'blob': return "Reduce durable-input churn or increase durable-store throughput for recovery and derived-state processing.";
+      case 'object-store': return "Reduce durable-input churn or increase object-store throughput for recovery and derived-state processing.";
+      case 'worker': return "Ingestion pressure is too high; add ingest capacity or reduce upstream change volume.";
+      case 'message-queue': return "Queue/broker pressure is too high; add broker capacity, reduce bursts, or cut retry amplification.";
+      case 'batch-processor': return "Batch processor is overloaded; scale it up, reduce materialization, backfill, replay intensity, or lower work per task.";
       default: return "Review capacity and scale accordingly.";
     }
   };
