@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -28,6 +28,11 @@ const FIT_VIEW_OPTIONS = {
   duration: 800,
 };
 
+const getSystemFromUrl = (): 'starter' | 'pickgpu' => {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('system') === 'pickgpu' ? 'pickgpu' : 'starter';
+};
+
 export const SystemCanvasInner = () => {
   const {
     nodes,
@@ -35,7 +40,6 @@ export const SystemCanvasInner = () => {
     onNodesChange,
     onEdgesChange,
     onConnect,
-    runSimulation,
     loadStarterSystem,
     loadPickGPUSystem,
     currentSystem,
@@ -48,11 +52,30 @@ export const SystemCanvasInner = () => {
   const { fitView } = useReactFlow();
   const nodesInitialized = useNodesInitialized();
   const [isLegendMinimized, setIsLegendMinimized] = useState(true);
+  const hasHydratedFromUrl = useRef(false);
 
-  // Initial simulation run
   useEffect(() => {
-    runSimulation();
-  }, [runSimulation]);
+    if (hasHydratedFromUrl.current) return;
+    hasHydratedFromUrl.current = true;
+
+    if (getSystemFromUrl() === 'pickgpu') {
+      loadPickGPUSystem();
+      return;
+    }
+
+    loadStarterSystem();
+  }, [loadPickGPUSystem, loadStarterSystem]);
+
+  useEffect(() => {
+    if (currentSystem === 'custom') return;
+
+    const params = new URLSearchParams(window.location.search);
+    params.set('system', currentSystem);
+
+    const nextSearch = params.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, '', nextUrl);
+  }, [currentSystem]);
 
   useEffect(() => {
     if (!nodesInitialized || nodes.length === 0) return;
