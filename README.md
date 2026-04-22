@@ -1,8 +1,8 @@
 # System Design Simulator
 
-An interactive, frontend-first backend architecture simulator built with **React**, **TypeScript**, and **React Flow**. Visualize how your system behaves under load, identify bottlenecks, and experiment with horizontal and vertical scaling strategies in real-time.
+Live demo: https://jasoncaserta.github.io/system-design-simulator/
 
-![System Design Simulator Screenshot](https://github.com/jasoncaserta/system-design-simulator/blob/main/src/assets/hero.png?raw=true)
+An interactive, frontend-first backend architecture simulator built with **React**, **TypeScript**, and **React Flow**. Visualize how your system behaves under load, identify bottlenecks, and experiment with horizontal and vertical scaling strategies in real-time.
 
 ## 🚀 Features
 
@@ -91,21 +91,6 @@ The simulator uses a **Steady-State Mathematical Model** to calculate instantane
 
 4. Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-## 🌐 Free Hosting
-
-This repo is set up to deploy to **GitHub Pages** for free.
-
-1. Push the repository to GitHub.
-2. In GitHub, open **Settings → Pages**.
-3. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-4. Push to `main` (or re-run the **Deploy to GitHub Pages** workflow under **Actions**).
-
-If your repository stays at `jasoncaserta/system-design-simulator`, the site URL will be:
-
-`https://jasoncaserta.github.io/system-design-simulator/`
-
-If you rename the repository later, update the production `base` path in [vite.config.ts](/Users/jasoncaserta/Projects/sys-design-sim/vite.config.ts).
-
 ## 📖 Usage
 
 1. **Adjust Traffic**: Use the sliders in the **Global Traffic** section to increase users or RPS.
@@ -115,7 +100,3 @@ If you rename the repository later, update the production `base` path in [vite.c
    - Click **+** or **-** on infrastructure nodes for **Horizontal Scaling**.
    - Change the **Instance Size** dropdown for **Vertical Scaling**.
 5. **Fix Bottlenecks**: Watch the **Bottleneck Panel** for alerts when nodes turn red and follow the "Fix" recommendations.
-
----
-
-Built with ❤️ for system design enthusiasts.
