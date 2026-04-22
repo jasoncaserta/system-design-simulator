@@ -103,17 +103,37 @@ const INITIAL_CAPACITIES = {
 
 const LAYERS: LayerDef[] = [
   { id: 'client', type: 'client', label: 'CLIENTS', implementationLabel: 'Browsers', x: 0, y: 0 },
-  { id: 'cdn', type: 'cdn', label: 'EDGE CACHE', implementationLabel: 'Cloudflare', x: 1, y: 0 },
-  { id: 'load-balancer', type: 'load-balancer', label: 'LOAD BALANCER', implementationLabel: 'Nginx', x: 2, y: 0 },
+  { id: 'cdn', type: 'cdn', label: 'EDGE CACHE', implementationLabel: 'CDN', x: 1, y: 0 },
+  { id: 'load-balancer', type: 'load-balancer', label: 'REQUEST ROUTER', implementationLabel: 'Nginx / Envoy', x: 2, y: 0 },
   { id: 'message-queue', type: 'message-queue', label: 'MESSAGE QUEUE', implementationLabel: 'Kafka / RabbitMQ', x: 2, y: 0.9 },
-  { id: 'service', type: 'service', label: 'STATELESS SERVICE', implementationLabel: 'FastAPI + Uvicorn', x: 3, y: 0 },
-  { id: 'worker', type: 'worker', label: 'INGESTION WORKERS', implementationLabel: "Tom's + Canopy + amzpy + eBay", x: 3, y: 1.24 },
-  { id: 'cache', type: 'cache', label: 'SERVING CACHE', implementationLabel: 'Process Memory', x: 4, y: 0.44 },
-  { id: 'object-store', type: 'object-store', label: 'OBJECT STORE', implementationLabel: 'Export CSV Repo', x: 4, y: 1.24 },
-  { id: 'relational-db', type: 'relational-db', label: 'RELATIONAL DB', implementationLabel: 'PostgreSQL / MySQL', x: 5, y: 0 },
+  { id: 'service', type: 'service', label: 'STATELESS SERVICE', implementationLabel: 'API Service', x: 3, y: 0 },
+  { id: 'worker', type: 'worker', label: 'WORKERS', implementationLabel: 'Async Workers', x: 3, y: 1.24 },
+  { id: 'cache', type: 'cache', label: 'SERVING CACHE', implementationLabel: 'Redis / Memcached', x: 4, y: 0.385 },
+  { id: 'object-store', type: 'object-store', label: 'DURABLE STORE', implementationLabel: 'S3 / GCS', x: 4, y: 1.24 },
+  { id: 'relational-db', type: 'relational-db', label: 'DATABASE', implementationLabel: 'PostgreSQL / MySQL', x: 5, y: 0 },
   { id: 'nosql-db', type: 'nosql-db', label: 'NOSQL DB', implementationLabel: 'Cassandra / MongoDB', x: 6, y: 0.08 },
-  { id: 'batch-processor', type: 'batch-processor', label: 'BATCH PROCESSOR', implementationLabel: 'Rescore + Replay + Backfill', x: 7, y: 0.95 },
+  { id: 'batch-processor', type: 'batch-processor', label: 'BATCH PROCESSOR', implementationLabel: 'Spark / Flink / Batch Jobs', x: 7, y: 0.95 },
 ];
+
+const PICKGPU_NODE_LABELS: Record<string, string> = {
+  'load-balancer': 'REQUEST ROUTER',
+  'message-queue': 'JOB SCHEDULER',
+  cache: 'SERVING CACHE',
+  'object-store': 'DURABLE STORE',
+  'relational-db': 'SERVING DATABASE',
+};
+
+const PICKGPU_IMPLEMENTATION_LABELS: Record<string, string> = {
+  cdn: 'Cloudflare',
+  'load-balancer': 'Nginx',
+  'message-queue': 'APScheduler + QueueManager',
+  service: 'FastAPI + Uvicorn',
+  worker: 'Source Jobs + Scrapers',
+  cache: 'In-Process Cache',
+  'object-store': 'Export CSV Repo',
+  'relational-db': 'SQLite',
+  'batch-processor': 'Cross-Market Rescore + History Rebuild',
+};
 
 const distribute = (
   nodeMap: Map<string, Node<NodeData>>,
@@ -134,7 +154,7 @@ const PICKGPU_NODE_COUNTS = {
   service: 1,
   cache: 1,
   'relational-db': 1,
-  'nosql-db': 1,
+  'nosql-db': 0,
   'message-queue': 1,
   worker: 1,
   'object-store': 1,
@@ -290,9 +310,9 @@ const buildPickGPUDefaults = () => {
     cacheInvalidationRate: 0.25,
     serviceFanout: 2,
     databaseShardCount: 1,
-    nosqlPartitionCount: 6,
+    nosqlPartitionCount: 1,
     databaseWriteLoad: 0.35,
-    relationalReplicationMode: 'leader_follower' as const,
+    relationalReplicationMode: 'single_leader' as const,
     objectStoreThroughput: 0.65,
     objectStoreScanCost: 0.25,
     maxBackgroundConcurrency: 2,
@@ -309,7 +329,15 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
   currentSystem: 'starter',
   expandedNodeId: null,
   showNodeConfig: true,
+  nodeLabels: {},
   implementationLabels: {},
+
+  updateNodeLabel: (nodeId, label) => {
+    set((state) => ({
+      nodeLabels: { ...state.nodeLabels, [nodeId]: label },
+    }));
+    get().runSimulation();
+  },
 
   updateImplementationLabel: (nodeId, label) => {
     set((state) => ({
@@ -397,6 +425,7 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
       ...INITIAL_PARAMS,
       currentSystem: 'starter',
       expandedNodeId: null,
+      nodeLabels: {},
       implementationLabels: {},
     });
     get().runSimulation();
@@ -408,7 +437,8 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
       ...pickGPUDefaults,
       currentSystem: 'pickgpu',
       expandedNodeId: null,
-      implementationLabels: {},
+      nodeLabels: { ...PICKGPU_NODE_LABELS },
+      implementationLabels: { ...PICKGPU_IMPLEMENTATION_LABELS },
     });
     get().runSimulation();
   },
@@ -444,6 +474,7 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
       enableApiPriorityGate,
       nodeCounts,
       nodeCapacities,
+      nodeLabels,
       implementationLabels,
     } = get();
 
@@ -467,7 +498,7 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
         position: { x: colMap.get(layer.x)!, y: layer.y * ROW_HEIGHT },
         data: {
           type: layer.type as NodeType,
-          label: layer.label,
+          label: nodeLabels[layer.id] ?? layer.label,
           implementationLabel: implementationLabels[layer.id] ?? layer.implementationLabel,
           instances: count,
           maxCapacityPerInstance:

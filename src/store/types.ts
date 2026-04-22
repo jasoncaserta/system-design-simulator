@@ -73,12 +73,14 @@ export interface SimulationStore extends SimulationParams {
   currentSystem: 'starter' | 'pickgpu' | 'custom';
   expandedNodeId: string | null;
   showNodeConfig: boolean;
+  nodeLabels: Record<string, string>;
   implementationLabels: Record<string, string>;
 
   // Actions
   updateSimParams: (params: Partial<SimulationParams>) => void;
   updateNodeInstances: (nodeId: string, instances: number) => void;
   updateNodeCapacity: (nodeId: string, capacity: number) => void;
+  updateNodeLabel: (nodeId: string, label: string) => void;
   updateImplementationLabel: (nodeId: string, label: string) => void;
   setExpandedNodeId: (id: string | null) => void;
   toggleNodeConfig: () => void;

@@ -42,6 +42,20 @@ const IconMap = {
   'batch-processor': Cpu,
 };
 
+const TypeColors = {
+  client: 'bg-sky-500',
+  cdn: 'bg-sky-500',
+  'load-balancer': 'bg-sky-500',
+  service: 'bg-violet-500',
+  cache: 'bg-violet-500',
+  'relational-db': 'bg-amber-500',
+  'nosql-db': 'bg-amber-500',
+  'message-queue': 'bg-emerald-500',
+  worker: 'bg-emerald-500',
+  'object-store': 'bg-emerald-500',
+  'batch-processor': 'bg-emerald-500',
+} as const;
+
 const StatusColors = {
   healthy: 'border-green-500 bg-green-50 dark:bg-green-900/20',
   stressed: 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20',
@@ -53,6 +67,7 @@ const CustomNodeInner = ({ id, data }: NodeProps<NodeData>) => {
   const { showNodeConfig, updateImplementationLabel } = useSimulatorStore();
   const Icon = IconMap[data.type] || ServerCog;
   const statusColor = StatusColors[data.status];
+  const typeColor = TypeColors[data.type] || 'bg-blue-500';
   const handleClassName = "w-2 h-2 !bg-gray-400 !opacity-0";
 
   const stackLayers = Math.min(data.instances, 4) - 1; // 0-3 shadow layers behind
@@ -93,11 +108,13 @@ const CustomNodeInner = ({ id, data }: NodeProps<NodeData>) => {
       )}>
 
         <div className="flex items-center">
-          <div className="rounded-full p-2 bg-white dark:bg-gray-800 shadow-sm mr-2 border border-gray-100 dark:border-gray-800">
-            <Icon size={16} className={cn(
-              data.status === 'overloaded' ? 'text-red-500' : 
-              data.status === 'stressed' ? 'text-yellow-500' : 'text-blue-500'
-            )} />
+          <div
+            className={cn(
+              'rounded-full p-2 shadow-sm mr-2 border border-gray-100 dark:border-gray-800',
+              typeColor,
+            )}
+          >
+            <Icon size={20} className="text-white" />
           </div>
           <div className="ml-2">
             <div className="text-xs font-black text-gray-900 dark:text-gray-100 uppercase tracking-wider">{data.label}</div>

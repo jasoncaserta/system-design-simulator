@@ -47,7 +47,7 @@ export const SystemCanvasInner = () => {
 
   const { fitView } = useReactFlow();
   const nodesInitialized = useNodesInitialized();
-  const [isLegendMinimized, setIsLegendMinimized] = useState(false);
+  const [isLegendMinimized, setIsLegendMinimized] = useState(true);
 
   // Initial simulation run
   useEffect(() => {
@@ -137,7 +137,7 @@ export const SystemCanvasInner = () => {
             className="w-full flex items-center justify-between text-left cursor-pointer"
           >
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Connection Key
+              Legend
             </p>
             {isLegendMinimized ? (
               <ChevronUp size={14} className="text-slate-500 dark:text-slate-400" />
@@ -173,6 +173,29 @@ export const SystemCanvasInner = () => {
                   </div>
                   <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     One-way lifecycle / rebuild movement
+                  </div>
+                </div>
+              </div>
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-3">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-slate-800 dark:text-slate-100">
+                  Node Categories
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-sky-500" />
+                    <span>Ingress</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-violet-500" />
+                    <span>Serving</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-amber-500" />
+                    <span>Data</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-emerald-500" />
+                    <span>Background</span>
                   </div>
                 </div>
               </div>
