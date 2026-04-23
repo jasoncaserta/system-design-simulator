@@ -80,13 +80,13 @@ const CustomNodeInner = ({ id, data }: NodeProps<NodeData>) => {
   const Icon = IconMap[data.type] || ServerCog;
   const statusColor = StatusColors[data.status];
   const typeColor = TypeColors[data.type] || 'bg-blue-500';
-  const handleClassName = "w-2 h-2 !bg-gray-400 !opacity-0";
+  const handleClassName = "!w-4 !h-4 !bg-blue-500 !opacity-0 group-hover:!opacity-50 hover:!opacity-100 !rounded-full !border-2 !border-white dark:!border-gray-900 !transition-opacity !duration-150";
 
   const stackLayers = Math.min(data.instances, 4) - 1; // 0-3 shadow layers behind
   const loadPercent = (data.currentLoad / (data.instances * data.maxCapacityPerInstance)) * 100;
 
   return (
-    <div className="relative">
+    <div className="relative group">
       <Handle id="target-left" type="target" position={Position.Left} className={handleClassName} />
       <Handle id="target-top" type="target" position={Position.Top} className={handleClassName} />
       <Handle id="target-right" type="target" position={Position.Right} className={handleClassName} />

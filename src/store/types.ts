@@ -65,6 +65,42 @@ export interface SimulationParams {
   enableApiPriorityGate: boolean;
 }
 
+export interface UserEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+  kind: 'request' | 'data';
+}
+
+export interface SharedConfig {
+  v: 1;
+  currentSystem: 'starter' | 'pickgpu' | 'custom';
+  params: SimulationParams;
+  nodeCounts: Record<string, number>;
+  nodeCapacities: Record<string, number>;
+  nodeLabels: Record<string, string>;
+  implementationLabels: Record<string, string>;
+  enabledLayers: string[];
+  deletedEdgeIds: string[];
+  userAddedEdges: UserEdge[];
+  customNodePositions: Record<string, { x: number; y: number }>;
+}
+
+// Snapshot of source-of-truth state (excludes derived nodes/edges and UI state)
+export type SimulationSnapshot = SimulationParams & {
+  nodeCounts: Record<string, number>;
+  nodeCapacities: Record<string, number>;
+  nodeLabels: Record<string, string>;
+  implementationLabels: Record<string, string>;
+  enabledLayers: string[];
+  deletedEdgeIds: string[];
+  userAddedEdges: UserEdge[];
+  customNodePositions: Record<string, { x: number; y: number }>;
+  currentSystem: 'starter' | 'pickgpu' | 'custom';
+};
+
 export interface SimulationStore extends SimulationParams {
   nodes: Node<NodeData>[];
   edges: Edge<EdgeData>[];
@@ -75,6 +111,13 @@ export interface SimulationStore extends SimulationParams {
   showNodeConfig: boolean;
   nodeLabels: Record<string, string>;
   implementationLabels: Record<string, string>;
+  enabledLayers: string[];
+  savedNodeCounts: Record<string, number>;
+  deletedEdgeIds: string[];
+  userAddedEdges: UserEdge[];
+  customNodePositions: Record<string, { x: number; y: number }>;
+  past: SimulationSnapshot[];
+  future: SimulationSnapshot[];
 
   // Actions
   updateSimParams: (params: Partial<SimulationParams>) => void;
@@ -86,8 +129,16 @@ export interface SimulationStore extends SimulationParams {
   toggleNodeConfig: () => void;
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
-  onConnect: (connection: Connection) => void;
+  addUserEdge: (connection: Connection, kind: 'request' | 'data') => void;
+  updateEdgeKind: (edgeId: string, kind: 'request' | 'data') => void;
+  addNode: (type: NodeType) => void;
+  refreshAutoLayout: () => void;
   runSimulation: () => void;
   loadStarterSystem: () => void;
   loadPickGPUSystem: () => void;
+  loadCustomSystem: (enabledLayerIds: string[], autoConnect?: boolean) => void;
+  setLayerEnabled: (layerId: string, enabled: boolean) => void;
+  hydrateFromConfig: (cfg: SharedConfig) => void;
+  undo: () => void;
+  redo: () => void;
 }

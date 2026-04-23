@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import {
-  addEdge,
   applyNodeChanges,
   applyEdgeChanges,
 } from 'reactflow';
@@ -9,11 +8,16 @@ import type {
   Edge,
   Node,
   NodeChange,
+  NodePositionChange,
   EdgeChange,
+  XYPosition,
 } from 'reactflow';
 import type {
   SimulationStore,
   SimulationParams,
+  SimulationSnapshot,
+  SharedConfig,
+  UserEdge,
   NodeData,
   EdgeData,
   NodeType,
@@ -24,6 +28,7 @@ import type {
   RecoveryMode,
   ReplicationMode,
 } from './types';
+import { layoutGraphNodes } from '../utils/autoLayout';
 
 const BACKGROUND_TIERS = new Set(['message-queue', 'worker', 'object-store', 'batch-processor']);
 
@@ -41,6 +46,13 @@ interface LayerDef {
 interface EdgeRoute {
   sourceHandle?: string;
   targetHandle?: string;
+}
+
+interface TopologyEdge {
+  id: string;
+  source: string;
+  target: string;
+  kind: EdgeData['kind'];
 }
 
 const INITIAL_PARAMS: SimulationParams = {
@@ -115,6 +127,8 @@ const LAYERS: LayerDef[] = [
   { id: 'batch-processor', type: 'batch-processor', label: 'BATCH PROCESSOR', implementationLabel: 'Spark / Flink / Batch Jobs', x: 7, y: 0.95 },
 ];
 
+const LAYER_BY_ID = new Map(LAYERS.map((layer) => [layer.id, layer]));
+
 const PICKGPU_NODE_LABELS: Record<string, string> = {
   'load-balancer': 'REQUEST ROUTER',
   'message-queue': 'JOB SCHEDULER',
@@ -146,6 +160,147 @@ const distribute = (
 };
 
 const sumLoads = (...loads: number[]) => loads.reduce((acc, load) => acc + load, 0);
+
+/** Generate sensible default edges for a custom system based on which node types are enabled. */
+function buildDefaultEdges(enabledIds: string[]): UserEdge[] {
+  const has = (id: string) => enabledIds.includes(id);
+  const edges: UserEdge[] = [];
+  const getAutoRoute = (source: string, target: string): EdgeRoute => {
+    const sourceLayer = LAYER_BY_ID.get(source);
+    const targetLayer = LAYER_BY_ID.get(target);
+    if (!sourceLayer || !targetLayer) {
+      return { sourceHandle: 'source-right', targetHandle: 'target-left' };
+    }
+
+    const dx = targetLayer.x - sourceLayer.x;
+    const dy = targetLayer.y - sourceLayer.y;
+
+    if (Math.abs(dx) < 0.2) {
+      return dy >= 0
+        ? { sourceHandle: 'source-bottom', targetHandle: 'target-top' }
+        : { sourceHandle: 'source-top', targetHandle: 'target-bottom' };
+    }
+
+    if (dx > 0) {
+      if (dy > 0.25) {
+        return { sourceHandle: 'source-right-lower', targetHandle: 'target-left-upper' };
+      }
+      if (dy < -0.25) {
+        return { sourceHandle: 'source-right-upper', targetHandle: 'target-left-lower' };
+      }
+      return { sourceHandle: 'source-right', targetHandle: 'target-left' };
+    }
+
+    if (dy > 0.25) {
+      return { sourceHandle: 'source-left', targetHandle: 'target-top-right' };
+    }
+    if (dy < -0.25) {
+      return { sourceHandle: 'source-left', targetHandle: 'target-bottom' };
+    }
+    return { sourceHandle: 'source-left', targetHandle: 'target-right' };
+  };
+
+  const edge = (source: string, target: string, kind: 'request' | 'data') => {
+    if (has(source) && has(target)) {
+      edges.push({
+        id: `user-${source}-${target}-${kind}`,
+        source,
+        target,
+        kind,
+        ...getAutoRoute(source, target),
+      });
+    }
+  };
+  // Ingress path
+  if (has('cdn')) {
+    edge('client', 'cdn', 'request');
+    edge('cdn', 'load-balancer', 'request');
+  } else {
+    edge('client', 'load-balancer', 'request');
+  }
+  edge('load-balancer', 'service', 'request');
+  // Serving
+  edge('service', 'cache', 'request');
+  edge('cache', 'nosql-db', 'request');
+  edge('cache', 'relational-db', 'request');
+  edge('service', 'relational-db', 'data');
+  // Background pipeline
+  edge('service', 'message-queue', 'data');
+  edge('message-queue', 'worker', 'data');
+  edge('message-queue', 'batch-processor', 'data');
+  edge('worker', 'object-store', 'data');
+  edge('object-store', 'batch-processor', 'data');
+  edge('batch-processor', 'nosql-db', 'data');
+  edge('batch-processor', 'relational-db', 'data');
+  return edges;
+}
+
+function buildPresetTopologyEdges(enabledIds: string[]): TopologyEdge[] {
+  const has = (id: string) => enabledIds.includes(id);
+  const edges: TopologyEdge[] = [];
+  const edge = (source: string, target: string, kind: EdgeData['kind']) => {
+    if (!has(source) || !has(target)) return;
+    edges.push({ id: `e-${source}-${target}-${kind}`, source, target, kind });
+  };
+
+  if (has('cdn')) {
+    edge('client', 'cdn', 'request');
+    edge('cdn', 'load-balancer', 'request');
+  } else {
+    edge('client', 'load-balancer', 'request');
+  }
+
+  edge('load-balancer', 'service', 'request');
+  edge('service', 'cache', 'request');
+  edge('cache', has('nosql-db') ? 'nosql-db' : 'relational-db', 'request');
+  if (has('nosql-db')) {
+    edge('cache', 'relational-db', 'request');
+  }
+  edge('service', 'relational-db', 'data');
+  edge('message-queue', 'worker', 'data');
+  edge('worker', 'object-store', 'data');
+  edge('message-queue', 'batch-processor', 'data');
+  edge('object-store', 'batch-processor', 'data');
+  edge('batch-processor', has('nosql-db') ? 'nosql-db' : 'relational-db', 'data');
+
+  return edges;
+}
+
+function buildAutoLayoutPositions(
+  currentSystem: SimulationStore['currentSystem'],
+  activeLayers: LayerDef[],
+  userAddedEdges: UserEdge[],
+  deletedEdgeIds: string[],
+  existingNodes: Node<NodeData>[],
+): Record<string, XYPosition> {
+  const activeIds = new Set(activeLayers.map((layer) => layer.id));
+  const deletedIds = new Set(deletedEdgeIds);
+  const existingNodeMap = new Map(existingNodes.map((node) => [node.id, node]));
+  const orderedNodes = activeLayers.map((layer, order) => {
+    const measured = existingNodeMap.get(layer.id);
+    return {
+      id: layer.id,
+      order,
+      width: measured?.width ?? undefined,
+      height: measured?.height ?? undefined,
+    };
+  });
+
+  const layoutEdges = currentSystem === 'custom'
+    ? userAddedEdges
+        .filter((edge) => activeIds.has(edge.source) && activeIds.has(edge.target))
+        .map((edge) => ({ source: edge.source, target: edge.target, kind: edge.kind }))
+    : [
+        ...buildPresetTopologyEdges(Array.from(activeIds))
+          .filter((edge) => !deletedIds.has(edge.id))
+          .map((edge) => ({ source: edge.source, target: edge.target, kind: edge.kind })),
+        ...userAddedEdges
+          .filter((edge) => activeIds.has(edge.source) && activeIds.has(edge.target) && !deletedIds.has(edge.id))
+          .map((edge) => ({ source: edge.source, target: edge.target, kind: edge.kind })),
+      ];
+
+  return layoutGraphNodes(orderedNodes, layoutEdges);
+}
 
 const PICKGPU_NODE_COUNTS = {
   client: 1,
@@ -320,7 +475,45 @@ const buildPickGPUDefaults = () => {
   };
 };
 
-export const useSimulatorStore = create<SimulationStore>((set, get) => ({
+const STARTER_ENABLED_LAYERS = ['client', 'load-balancer', 'service', 'cache', 'relational-db'];
+const PICKGPU_ENABLED_LAYERS = ['client', 'cdn', 'load-balancer', 'service', 'cache', 'relational-db', 'message-queue', 'worker', 'object-store', 'batch-processor'];
+const ALL_LAYER_IDS = LAYERS.map((l) => l.id);
+
+const MAX_HISTORY = 50;
+
+/** Capture a snapshot of source-of-truth state from the store's get() accessor. */
+const captureSnapshot = (s: SimulationStore): SimulationSnapshot => ({
+  users: s.users, rpsPerUser: s.rpsPerUser, readWriteRatio: s.readWriteRatio,
+  cacheHitRate: s.cacheHitRate, cdnHitRate: s.cdnHitRate,
+  cacheWorkingSetFit: s.cacheWorkingSetFit, cacheInvalidationRate: s.cacheInvalidationRate,
+  serviceFanout: s.serviceFanout, sourceJobTypes: s.sourceJobTypes,
+  refreshCadence: s.refreshCadence, queueDepth: s.queueDepth,
+  averageJobCost: s.averageJobCost, retryRate: s.retryRate, batchSize: s.batchSize,
+  derivedStateCadence: s.derivedStateCadence, backfillMode: s.backfillMode,
+  recoveryMode: s.recoveryMode, processorLag: s.processorLag,
+  processingMode: s.processingMode, databaseShardCount: s.databaseShardCount,
+  nosqlPartitionCount: s.nosqlPartitionCount, databaseWriteLoad: s.databaseWriteLoad,
+  relationalReplicationMode: s.relationalReplicationMode,
+  objectStoreThroughput: s.objectStoreThroughput, objectStoreScanCost: s.objectStoreScanCost,
+  maxBackgroundConcurrency: s.maxBackgroundConcurrency, enableApiPriorityGate: s.enableApiPriorityGate,
+  nodeCounts: { ...s.nodeCounts }, nodeCapacities: { ...s.nodeCapacities },
+  nodeLabels: { ...s.nodeLabels }, implementationLabels: { ...s.implementationLabels },
+  enabledLayers: [...s.enabledLayers], deletedEdgeIds: [...s.deletedEdgeIds],
+  userAddedEdges: [...s.userAddedEdges], customNodePositions: { ...s.customNodePositions },
+  currentSystem: s.currentSystem,
+});
+
+export const useSimulatorStore = create<SimulationStore>((set, get) => {
+  /** Push current state to undo history and clear redo stack. */
+  const pushHistory = () => {
+    const snapshot = captureSnapshot(get());
+    set((state) => ({
+      past: [...state.past, snapshot].slice(-MAX_HISTORY),
+      future: [],
+    }));
+  };
+
+  return ({
   ...INITIAL_PARAMS,
   nodeCounts: { ...INITIAL_COUNTS },
   nodeCapacities: { ...INITIAL_CAPACITIES },
@@ -331,8 +524,16 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
   showNodeConfig: true,
   nodeLabels: {},
   implementationLabels: {},
+  enabledLayers: [...STARTER_ENABLED_LAYERS],
+  savedNodeCounts: {},
+  deletedEdgeIds: [],
+  userAddedEdges: [],
+  customNodePositions: {},
+  past: [],
+  future: [],
 
   updateNodeLabel: (nodeId, label) => {
+    pushHistory();
     set((state) => ({
       nodeLabels: { ...state.nodeLabels, [nodeId]: label },
     }));
@@ -340,6 +541,7 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
   },
 
   updateImplementationLabel: (nodeId, label) => {
+    pushHistory();
     set((state) => ({
       implementationLabels: { ...state.implementationLabels, [nodeId]: label },
     }));
@@ -357,11 +559,13 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
   },
 
   updateSimParams: (params) => {
+    pushHistory();
     set({ ...params, currentSystem: 'custom' });
     get().runSimulation();
   },
 
   updateNodeInstances: (tierId, instances) => {
+    pushHistory();
     const cleanTierId = tierId.replace(/-[0-9]+$/, '');
     const minInstances = CORE_TIERS.has(cleanTierId) ? 1 : 0;
     set((state) => ({
@@ -375,6 +579,7 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
   },
 
   updateNodeCapacity: (tierId, capacity) => {
+    pushHistory();
     const cleanTierId = tierId.replace(/-[0-9]+$/, '');
     set((state) => ({
       nodeCapacities: {
@@ -387,26 +592,129 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
   },
 
   onNodesChange: (changes: NodeChange[]) => {
-    set((state) => ({
-      nodes: applyNodeChanges(changes, state.nodes),
-    }));
+    const dragEndIds = changes
+      .filter((c): c is NodePositionChange => c.type === 'position' && c.dragging === false)
+      .map((c) => c.id);
+
+    if (dragEndIds.length > 0) {
+      pushHistory();
+      set((state) => {
+        const updatedNodes = applyNodeChanges(changes, state.nodes);
+        const posUpdates: Record<string, XYPosition> = {};
+        dragEndIds.forEach((id) => {
+          const node = updatedNodes.find((n) => n.id === id);
+          if (node?.position) posUpdates[id] = node.position;
+        });
+        return {
+          nodes: updatedNodes,
+          customNodePositions: { ...state.customNodePositions, ...posUpdates },
+        };
+      });
+      return;
+    }
+    set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) }));
   },
 
   onEdgesChange: (changes: EdgeChange[]) => {
-    set((state) => ({
-      edges: applyEdgeChanges(changes, state.edges),
-    }));
+    const removedIds = changes.filter((c) => c.type === 'remove').map((c) => c.id);
+    if (removedIds.length > 0) {
+      pushHistory();
+      set((state) => {
+        const simRemovedIds = removedIds.filter((id) => !state.userAddedEdges.some((e) => e.id === id));
+        return {
+          edges: applyEdgeChanges(changes, state.edges),
+          deletedEdgeIds: simRemovedIds.length > 0
+            ? [...new Set([...state.deletedEdgeIds, ...simRemovedIds])]
+            : state.deletedEdgeIds,
+          userAddedEdges: state.userAddedEdges.filter((e) => !removedIds.includes(e.id)),
+          currentSystem: 'custom',
+        };
+      });
+      get().runSimulation();
+    } else {
+      set((state) => ({
+        edges: applyEdgeChanges(changes, state.edges),
+      }));
+    }
   },
 
-  onConnect: (connection: Connection) => {
+  addUserEdge: (connection: Connection, kind: 'request' | 'data') => {
+    pushHistory();
+    const id = `user-${connection.source}-${connection.target}-${kind}`;
+    const userEdge: UserEdge = {
+      id,
+      source: connection.source!,
+      target: connection.target!,
+      sourceHandle: connection.sourceHandle ?? undefined,
+      targetHandle: connection.targetHandle ?? undefined,
+      kind,
+    };
     set((state) => ({
-      edges: addEdge(connection, state.edges),
-      currentSystem: 'custom',
+      userAddedEdges: [
+        ...state.userAddedEdges.filter((e) => !(e.source === connection.source && e.target === connection.target)),
+        userEdge,
+      ],
+      deletedEdgeIds: state.deletedEdgeIds.filter((did) => did !== id),
     }));
     get().runSimulation();
   },
 
+  updateEdgeKind: (edgeId: string, kind: 'request' | 'data') => {
+    const existingEdge = get().userAddedEdges.find((edge) => edge.id === edgeId);
+    if (!existingEdge || existingEdge.kind === kind) return;
+
+    pushHistory();
+    set((state) => {
+      const nextId = `user-${existingEdge.source}-${existingEdge.target}-${kind}`;
+
+      return {
+        userAddedEdges: state.userAddedEdges.map((edge) =>
+          edge.id === edgeId
+            ? { ...edge, id: nextId, kind }
+            : edge
+        ),
+        deletedEdgeIds: state.deletedEdgeIds.filter((id) => id !== nextId),
+        currentSystem: 'custom',
+      };
+    });
+    get().runSimulation();
+  },
+
+  addNode: (type: NodeType) => {
+    pushHistory();
+    const layer = LAYERS.find((l) => l.type === type);
+    if (!layer) return;
+    const state = get();
+    // Already present — just enable it
+    if ((state.nodeCounts[layer.id] || 0) >= 1) {
+      if (!state.enabledLayers.includes(layer.id)) {
+        set((s) => ({
+          nodeCounts: { ...s.nodeCounts, [layer.id]: 1 },
+          enabledLayers: [...s.enabledLayers, layer.id],
+        }));
+        get().runSimulation();
+      }
+      return;
+    }
+    // Compute a default position offset from existing nodes
+    const positions = Object.values(state.customNodePositions);
+    const maxX = positions.length > 0 ? Math.max(...positions.map((p) => p.x)) : -320;
+    const defaultPos: XYPosition = { x: maxX + 320, y: layer.y * 240 };
+    set((s) => ({
+      nodeCounts: { ...s.nodeCounts, [layer.id]: INITIAL_COUNTS[layer.id as keyof typeof INITIAL_COUNTS] || 1 },
+      enabledLayers: s.enabledLayers.includes(layer.id) ? s.enabledLayers : [...s.enabledLayers, layer.id],
+      customNodePositions: { ...s.customNodePositions, [layer.id]: s.customNodePositions[layer.id] ?? defaultPos },
+    }));
+    get().runSimulation();
+  },
+
+  refreshAutoLayout: () => {
+    set({ customNodePositions: {} });
+    get().runSimulation();
+  },
+
   loadStarterSystem: () => {
+    pushHistory();
     set({
       nodeCounts: {
         client: 1,
@@ -427,11 +735,17 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
       expandedNodeId: null,
       nodeLabels: {},
       implementationLabels: {},
+      enabledLayers: [...STARTER_ENABLED_LAYERS],
+      savedNodeCounts: {},
+      deletedEdgeIds: [],
+      userAddedEdges: [],
+      customNodePositions: {},
     });
     get().runSimulation();
   },
 
   loadPickGPUSystem: () => {
+    pushHistory();
     const pickGPUDefaults = buildPickGPUDefaults();
     set({
       ...pickGPUDefaults,
@@ -439,6 +753,111 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
       expandedNodeId: null,
       nodeLabels: { ...PICKGPU_NODE_LABELS },
       implementationLabels: { ...PICKGPU_IMPLEMENTATION_LABELS },
+      enabledLayers: [...PICKGPU_ENABLED_LAYERS],
+      savedNodeCounts: {},
+      deletedEdgeIds: [],
+      userAddedEdges: [],
+      customNodePositions: {},
+    });
+    get().runSimulation();
+  },
+
+  loadCustomSystem: (enabledLayerIds: string[], autoConnect = false) => {
+    pushHistory();
+    const counts: Record<string, number> = {};
+    ALL_LAYER_IDS.forEach((id) => {
+      counts[id] = enabledLayerIds.includes(id) ? (INITIAL_COUNTS[id as keyof typeof INITIAL_COUNTS] || 1) : 0;
+    });
+    counts['client'] = 1;
+
+    const orderedLayers = LAYERS.filter((l) => counts[l.id] > 0);
+    const userAddedEdges = autoConnect ? buildDefaultEdges(enabledLayerIds.concat(['client'])) : [];
+    const initialPositions = layoutGraphNodes(
+      orderedLayers.map((layer, order) => ({ id: layer.id, order })),
+      userAddedEdges.map((edge) => ({ source: edge.source, target: edge.target, kind: edge.kind })),
+    );
+
+    set({
+      ...INITIAL_PARAMS,
+      nodeCounts: counts,
+      nodeCapacities: { ...INITIAL_CAPACITIES },
+      currentSystem: 'custom',
+      expandedNodeId: null,
+      nodeLabels: {},
+      implementationLabels: {},
+      enabledLayers: [...enabledLayerIds],
+      savedNodeCounts: {},
+      deletedEdgeIds: [],
+      userAddedEdges,
+      customNodePositions: initialPositions,
+    });
+    get().runSimulation();
+  },
+
+  setLayerEnabled: (layerId: string, enabled: boolean) => {
+    pushHistory();
+    const state = get();
+    if (enabled) {
+      const restored = state.savedNodeCounts[layerId] ?? INITIAL_COUNTS[layerId as keyof typeof INITIAL_COUNTS] ?? 1;
+      set((s) => ({
+        nodeCounts: { ...s.nodeCounts, [layerId]: restored },
+        enabledLayers: s.enabledLayers.includes(layerId) ? s.enabledLayers : [...s.enabledLayers, layerId],
+        currentSystem: 'custom',
+      }));
+    } else {
+      const currentCount = state.nodeCounts[layerId] ?? 0;
+      set((s) => ({
+        nodeCounts: { ...s.nodeCounts, [layerId]: 0 },
+        savedNodeCounts: { ...s.savedNodeCounts, [layerId]: currentCount },
+        enabledLayers: s.enabledLayers.filter((id) => id !== layerId),
+        currentSystem: 'custom',
+      }));
+    }
+    get().runSimulation();
+  },
+
+  hydrateFromConfig: (cfg: SharedConfig) => {
+    set({
+      ...cfg.params,
+      nodeCounts: { ...cfg.nodeCounts },
+      nodeCapacities: { ...cfg.nodeCapacities },
+      nodeLabels: { ...cfg.nodeLabels },
+      implementationLabels: { ...cfg.implementationLabels },
+      enabledLayers: [...cfg.enabledLayers],
+      deletedEdgeIds: [...(cfg.deletedEdgeIds ?? [])],
+      userAddedEdges: [...(cfg.userAddedEdges ?? [])],
+      customNodePositions: { ...(cfg.customNodePositions ?? {}) },
+      savedNodeCounts: {},
+      currentSystem: cfg.currentSystem ?? 'custom',
+      expandedNodeId: null,
+    });
+    get().runSimulation();
+  },
+
+  undo: () => {
+    const { past, future } = get();
+    if (past.length === 0) return;
+    const prev = past[past.length - 1];
+    const current = captureSnapshot(get());
+    set({
+      ...prev,
+      past: past.slice(0, -1),
+      future: [current, ...future].slice(0, MAX_HISTORY),
+      expandedNodeId: null,
+    });
+    get().runSimulation();
+  },
+
+  redo: () => {
+    const { past, future } = get();
+    if (future.length === 0) return;
+    const next = future[0];
+    const current = captureSnapshot(get());
+    set({
+      ...next,
+      past: [...past, current].slice(-MAX_HISTORY),
+      future: future.slice(1),
+      expandedNodeId: null,
     });
     get().runSimulation();
   },
@@ -476,26 +895,36 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
       nodeCapacities,
       nodeLabels,
       implementationLabels,
+      currentSystem,
+      customNodePositions,
+      userAddedEdges,
+      deletedEdgeIds,
+      nodes: existingNodes,
     } = get();
 
     const totalQps = users * rpsPerUser;
     const activeLayers = LAYERS.filter((layer) => (nodeCounts[layer.id] || 0) > 0);
-
-    const COL_WIDTH = 340;
-    const ROW_HEIGHT = 500;
-
-    const usedCols = Array.from(new Set(activeLayers.map((l) => l.x))).sort((a, b) => a - b);
-    const colMap = new Map(usedCols.map((col, i) => [col, i * COL_WIDTH]));
+    const autoLayoutPositions = buildAutoLayoutPositions(
+      currentSystem,
+      activeLayers,
+      userAddedEdges,
+      deletedEdgeIds,
+      existingNodes,
+    );
 
     const newNodes: Node<NodeData>[] = [];
 
     activeLayers.forEach((layer) => {
       const count = nodeCounts[layer.id] ?? 0;
+      // Use stored position if available (preserves user drags across all system types)
+      const position = customNodePositions[layer.id]
+        ? customNodePositions[layer.id]
+        : autoLayoutPositions[layer.id] ?? { x: 0, y: 0 };
 
       newNodes.push({
         id: layer.id,
         type: 'custom',
-        position: { x: colMap.get(layer.x)!, y: layer.y * ROW_HEIGHT },
+        position,
         data: {
           type: layer.type as NodeType,
           label: nodeLabels[layer.id] ?? layer.label,
@@ -514,6 +943,102 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
         },
       });
     });
+
+    // Persist all node positions so reloads restore the layout exactly
+    const updatedPositions = { ...customNodePositions };
+    newNodes.forEach((n) => { updatedPositions[n.id] = n.position; });
+
+    // ── Custom topology: graph-based load propagation using user-drawn edges ──
+    if (currentSystem === 'custom') {
+      const nodeMap = new Map(newNodes.map((n) => [n.id, n]));
+
+      // Derive background load for data pipeline edges
+      const bgResult = deriveBackgroundLoads({
+        sourceJobTypes, refreshCadence, queueDepth, averageJobCost, retryRate,
+        batchSize, derivedStateCadence, backfillMode, recoveryMode, processorLag,
+        processingMode, objectStoreScanCost, maxBackgroundConcurrency,
+      });
+      const bgLoad = Math.max(bgResult.sourceFreshnessPressure + bgResult.processorLoad, 1);
+
+      // Build outgoing edge map for user-added edges between existing nodes
+      const validEdges = userAddedEdges.filter(
+        (e) => nodeMap.has(e.source) && nodeMap.has(e.target),
+      );
+      const outgoing = new Map<string, UserEdge[]>();
+      validEdges.forEach((e) => {
+        if (!outgoing.has(e.source)) outgoing.set(e.source, []);
+        outgoing.get(e.source)!.push(e);
+      });
+
+      // Propagate request load via BFS from client nodes
+      const requestTargets = new Set(validEdges.filter((e) => e.kind === 'request').map((e) => e.target));
+      const nodeLoad = new Map<string, number>();
+      const edgeLoad = new Map<string, number>();
+
+      // Seed: client-type nodes (or nodes with no incoming request edges)
+      newNodes.forEach((n) => {
+        if (n.data.type === 'client' || !requestTargets.has(n.id)) {
+          if (n.data.type === 'client') nodeLoad.set(n.id, totalQps);
+        }
+      });
+
+      const visited = new Set<string>();
+      const queue = newNodes.filter((n) => n.data.type === 'client').map((n) => n.id);
+
+      while (queue.length > 0) {
+        const nid = queue.shift()!;
+        if (visited.has(nid)) continue;
+        visited.add(nid);
+
+        const load = nodeLoad.get(nid) ?? 0;
+        const outs = outgoing.get(nid) ?? [];
+        const reqOuts = outs.filter((e) => e.kind === 'request');
+        const dataOuts = outs.filter((e) => e.kind === 'data');
+
+        if (reqOuts.length > 0) {
+          const perEdge = load / reqOuts.length;
+          reqOuts.forEach((e) => {
+            edgeLoad.set(e.id, perEdge);
+            nodeLoad.set(e.target, (nodeLoad.get(e.target) ?? 0) + perEdge);
+            if (!visited.has(e.target)) queue.push(e.target);
+          });
+        }
+
+        if (dataOuts.length > 0) {
+          const perEdge = bgLoad / dataOuts.length;
+          dataOuts.forEach((e) => {
+            edgeLoad.set(e.id, perEdge);
+            nodeLoad.set(e.target, (nodeLoad.get(e.target) ?? 0) + perEdge);
+            if (!visited.has(e.target)) queue.push(e.target);
+          });
+        }
+      }
+
+      // Apply loads and compute status
+      newNodes.forEach((node) => {
+        node.data.currentLoad = nodeLoad.get(node.id) ?? 0;
+        const cap = node.data.instances * node.data.maxCapacityPerInstance;
+        const ratio = cap > 0 ? node.data.currentLoad / cap : 0;
+        if (ratio > 1.0) node.data.status = 'overloaded';
+        else if (ratio > 0.8) node.data.status = 'stressed';
+        else if (node.data.currentLoad === 0) node.data.status = 'idle';
+        else node.data.status = 'healthy';
+      });
+
+      const customEdges = validEdges.map((ue) => ({
+        id: ue.id,
+        source: ue.source,
+        target: ue.target,
+        sourceHandle: ue.sourceHandle,
+        targetHandle: ue.targetHandle,
+        type: 'custom' as const,
+        zIndex: 10,
+        data: { throughput: edgeLoad.get(ue.id) ?? 0, kind: ue.kind },
+      }));
+
+      set({ nodes: newNodes, edges: customEdges, customNodePositions: updatedPositions });
+      return;
+    }
 
     const nodeMap = new Map(newNodes.map((node) => [node.id, node]));
 
@@ -661,6 +1186,21 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => ({
     connect('object-store', 'batch-processor', processorLoad, 'data', { sourceHandle: 'source-right', targetHandle: 'target-left-lower' });
     connect('batch-processor', hasNoSql ? 'nosql-db' : 'relational-db', processorLoad, 'data', { sourceHandle: 'source-top-left', targetHandle: 'target-bottom' });
 
-    set({ nodes: newNodes, edges: newEdges });
+    // For presets: apply deleted edge overrides, then append any user-added edges
+    const filteredEdges = newEdges.filter((e) => !deletedEdgeIds.includes(e.id));
+    const userEdgesForPreset = userAddedEdges
+      .filter((ue) => nodeMap.has(ue.source) && nodeMap.has(ue.target) && !deletedEdgeIds.includes(ue.id))
+      .map((ue) => ({
+        id: ue.id,
+        source: ue.source,
+        target: ue.target,
+        sourceHandle: ue.sourceHandle,
+        targetHandle: ue.targetHandle,
+        type: 'custom' as const,
+        zIndex: 10,
+        data: { throughput: nodeMap.get(ue.source)?.data.currentLoad ?? 0, kind: ue.kind } as EdgeData,
+      }));
+    set({ nodes: newNodes, edges: [...filteredEdges, ...userEdgesForPreset], customNodePositions: updatedPositions });
   },
-}));
+});
+});
