@@ -483,29 +483,29 @@ export const SystemCanvasInner = () => {
               <div className="flex items-start space-x-3">
                 <div className="relative mt-1 h-2 w-12 shrink-0">
                   <div className="absolute inset-x-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-blue-500/70" />
-                  <div className="absolute left-1 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-blue-400" />
-                  <div className="absolute right-2 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-blue-300/80" />
+                  <div className="absolute left-2 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-sky-400" />
+                  <div className="absolute right-3 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-sky-400/70" />
                 </div>
                 <div>
                   <div className="text-[11px] font-bold uppercase tracking-wide text-slate-800 dark:text-slate-100">
                     Request Path
                   </div>
                   <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Bidirectional request / response traffic
+                    Small cyan dots
                   </div>
                 </div>
               </div>
               <div className="flex items-start space-x-3">
-                <div className="relative mt-1 h-2 w-12 shrink-0">
+                <div className="relative mt-1 h-3 w-12 shrink-0">
                   <div className="absolute inset-x-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-amber-500/70" />
-                  <div className="absolute left-2 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-amber-400" />
+                  <div className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-amber-300" />
                 </div>
                 <div>
                   <div className="text-[11px] font-bold uppercase tracking-wide text-slate-800 dark:text-slate-100">
                     Data Pipeline
                   </div>
                   <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    One-way lifecycle / rebuild movement
+                    Large amber dots
                   </div>
                 </div>
               </div>

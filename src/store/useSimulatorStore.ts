@@ -55,6 +55,178 @@ interface TopologyEdge {
   kind: EdgeData['kind'];
 }
 
+interface ResolvedTopologyEdge extends TopologyEdge {
+  sourceHandle?: string;
+  targetHandle?: string;
+}
+
+const SERVING_DB_TYPES = new Set<NodeType>(['relational-db', 'nosql-db']);
+
+const inferBypassEdgesForRemovedNode = (
+  edges: UserEdge[],
+  removedNodeId: string,
+  hasNoSql: boolean,
+): UserEdge[] => {
+  const incoming = edges.filter((edge) => edge.target === removedNodeId);
+  const outgoing = edges.filter((edge) => edge.source === removedNodeId);
+  const inferred: UserEdge[] = [];
+
+  incoming.forEach((inEdge) => {
+    outgoing
+      .filter((outEdge) => outEdge.kind === inEdge.kind && outEdge.target !== inEdge.source)
+      .forEach((outEdge) => {
+        const id = `user-${inEdge.source}-${outEdge.target}-${inEdge.kind}`;
+        inferred.push({
+          id,
+          source: inEdge.source,
+          target: outEdge.target,
+          kind: inEdge.kind,
+          sourceHandle: inEdge.sourceHandle,
+          targetHandle: outEdge.targetHandle,
+        });
+      });
+  });
+
+  return inferred;
+};
+
+const getDefaultRoute = (
+  source: string,
+  target: string,
+  kind: EdgeData['kind'],
+  hasNoSql: boolean,
+): EdgeRoute => {
+  if ((source === 'client' && target === 'cdn') || (source === 'cdn' && target === 'load-balancer') || (source === 'client' && target === 'load-balancer') || (source === 'load-balancer' && target === 'service')) {
+    return { sourceHandle: 'source-right', targetHandle: 'target-left' };
+  }
+  if (source === 'service' && target === 'cache') {
+    return { sourceHandle: 'source-bottom', targetHandle: 'target-left' };
+  }
+  if (source === 'cache' && target === 'relational-db') {
+    return hasNoSql
+      ? { sourceHandle: 'source-right', targetHandle: 'target-top' }
+      : { sourceHandle: 'source-right', targetHandle: 'target-bottom' };
+  }
+  if (source === 'cache' && target === 'nosql-db') {
+    return { sourceHandle: 'source-right', targetHandle: 'target-bottom' };
+  }
+  if (source === 'service' && SERVING_DB_TYPES.has(target as NodeType)) {
+    if (kind === 'request') {
+      return { sourceHandle: 'source-bottom', targetHandle: 'target-left' };
+    }
+    return { sourceHandle: 'source-right', targetHandle: 'target-left' };
+  }
+  if ((source === 'message-queue' && target === 'worker') || (source === 'worker' && target === 'object-store') || (source === 'message-queue' && target === 'batch-processor') || (source === 'worker' && target === 'batch-processor') || (source === 'object-store' && target === 'batch-processor')) {
+    return { sourceHandle: 'source-right', targetHandle: 'target-left' };
+  }
+  if (source === 'batch-processor' && SERVING_DB_TYPES.has(target as NodeType)) {
+    return { sourceHandle: 'source-top', targetHandle: 'target-bottom' };
+  }
+
+  const sourceLayer = LAYER_BY_ID.get(source);
+  const targetLayer = LAYER_BY_ID.get(target);
+  if (!sourceLayer || !targetLayer) {
+    return kind === 'request'
+      ? { sourceHandle: 'source-right', targetHandle: 'target-left' }
+      : { sourceHandle: 'source-bottom', targetHandle: 'target-top' };
+  }
+
+  const dx = targetLayer.x - sourceLayer.x;
+  const dy = targetLayer.y - sourceLayer.y;
+  if (Math.abs(dx) < 0.2) {
+    return dy >= 0
+      ? { sourceHandle: 'source-bottom', targetHandle: 'target-top' }
+      : { sourceHandle: 'source-top', targetHandle: 'target-bottom' };
+  }
+  if (dx > 0) {
+    return { sourceHandle: 'source-right', targetHandle: 'target-left' };
+  }
+  return { sourceHandle: 'source-left', targetHandle: 'target-right' };
+};
+
+const buildVisibleTopologyEdges = (
+  currentSystem: SimulationStore['currentSystem'],
+  activeIds: Set<string>,
+  userAddedEdges: UserEdge[],
+  deletedEdgeIds: string[],
+  hasNoSql: boolean,
+): ResolvedTopologyEdge[] => {
+  const deletedIds = new Set(deletedEdgeIds);
+  const presetEdges = currentSystem === 'custom'
+    ? []
+    : buildPresetTopologyEdges(Array.from(activeIds))
+        .filter((edge) => !deletedIds.has(edge.id))
+        .map((edge) => ({
+          ...edge,
+          ...getDefaultRoute(edge.source, edge.target, edge.kind, hasNoSql),
+        }));
+
+  const userEdges = userAddedEdges
+    .filter((edge) => activeIds.has(edge.source) && activeIds.has(edge.target) && !deletedIds.has(edge.id))
+    .map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      kind: edge.kind,
+      sourceHandle: normalizeHandleId(edge.sourceHandle),
+      targetHandle: normalizeHandleId(edge.targetHandle),
+    }));
+
+  const byKey = new Map<string, ResolvedTopologyEdge>();
+  [...presetEdges, ...userEdges].forEach((edge) => {
+    byKey.set(`${edge.source}:${edge.target}:${edge.kind}`, edge);
+  });
+
+  const hasCacheNode = activeIds.has('cache');
+  const hasServiceRequestCache = byKey.has('service:cache:request');
+  const hasDirectServingRequest = Array.from(byKey.values()).some(
+    (edge) => edge.source === 'service' && edge.kind === 'request' && SERVING_DB_TYPES.has(edge.target as NodeType),
+  );
+
+  if (!hasCacheNode && !hasServiceRequestCache && !hasDirectServingRequest) {
+    const inferredTargets = ['relational-db', 'nosql-db'].filter((id) => activeIds.has(id));
+    inferredTargets.forEach((target) => {
+      const inferredId = `user-service-${target}-request`;
+      if (deletedIds.has(inferredId)) return;
+      if (byKey.has(`service:${target}:request`)) return;
+      const inferredEdge: ResolvedTopologyEdge = {
+        id: inferredId,
+        source: 'service',
+        target,
+        kind: 'request',
+        ...getDefaultRoute('service', target, 'request', hasNoSql),
+      };
+      byKey.set(`service:${target}:request`, inferredEdge);
+    });
+  }
+
+  return Array.from(byKey.values());
+};
+
+const pushEdgeFlow = (
+  edgeLoad: Map<string, number>,
+  nodeIncoming: Map<string, number>,
+  edge: ResolvedTopologyEdge,
+  throughput: number,
+) => {
+  if (throughput <= 0) return;
+  edgeLoad.set(edge.id, (edgeLoad.get(edge.id) ?? 0) + throughput);
+  nodeIncoming.set(edge.target, (nodeIncoming.get(edge.target) ?? 0) + throughput);
+};
+
+const normalizeHandleId = (handle?: string | null) => {
+  if (!handle) return undefined;
+  if (handle.startsWith('source-left')) return 'source-left';
+  if (handle.startsWith('source-top')) return 'source-top';
+  if (handle.startsWith('source-right')) return 'source-right';
+  if (handle.startsWith('source-bottom')) return 'source-bottom';
+  if (handle.startsWith('target-left')) return 'target-left';
+  if (handle.startsWith('target-top')) return 'target-top';
+  if (handle.startsWith('target-right')) return 'target-right';
+  if (handle.startsWith('target-bottom')) return 'target-bottom';
+  return handle;
+};
+
 const INITIAL_PARAMS: SimulationParams = {
   users: 1000,
   rpsPerUser: 0.1,
@@ -182,17 +354,11 @@ function buildDefaultEdges(enabledIds: string[]): UserEdge[] {
     }
 
     if (dx > 0) {
-      if (dy > 0.25) {
-        return { sourceHandle: 'source-right-lower', targetHandle: 'target-left-upper' };
-      }
-      if (dy < -0.25) {
-        return { sourceHandle: 'source-right-upper', targetHandle: 'target-left-lower' };
-      }
       return { sourceHandle: 'source-right', targetHandle: 'target-left' };
     }
 
     if (dy > 0.25) {
-      return { sourceHandle: 'source-left', targetHandle: 'target-top-right' };
+      return { sourceHandle: 'source-left', targetHandle: 'target-top' };
     }
     if (dy < -0.25) {
       return { sourceHandle: 'source-left', targetHandle: 'target-bottom' };
@@ -560,7 +726,7 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
 
   updateSimParams: (params) => {
     pushHistory();
-    set({ ...params, currentSystem: 'custom' });
+    set({ ...params });
     get().runSimulation();
   },
 
@@ -573,7 +739,6 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
         ...state.nodeCounts,
         [cleanTierId]: Math.max(minInstances, instances),
       },
-      currentSystem: 'custom',
     }));
     get().runSimulation();
   },
@@ -586,7 +751,6 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
         ...state.nodeCapacities,
         [cleanTierId]: Math.max(1, capacity),
       },
-      currentSystem: 'custom',
     }));
     get().runSimulation();
   },
@@ -621,12 +785,27 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
       pushHistory();
       set((state) => {
         const simRemovedIds = removedIds.filter((id) => !state.userAddedEdges.some((e) => e.id === id));
+        const remainingPresetEdges = state.currentSystem === 'custom'
+          ? state.userAddedEdges
+          : state.edges
+              .filter((edge) => !removedIds.includes(edge.id))
+              .map((edge) => ({
+                id: edge.id.startsWith('user-')
+                  ? edge.id
+                  : `user-${edge.source}-${edge.target}-${edge.data?.kind ?? 'request'}`,
+                source: edge.source,
+                target: edge.target,
+                sourceHandle: normalizeHandleId(edge.sourceHandle),
+                targetHandle: normalizeHandleId(edge.targetHandle),
+                kind: edge.data?.kind ?? 'request',
+              }));
+
         return {
           edges: applyEdgeChanges(changes, state.edges),
           deletedEdgeIds: simRemovedIds.length > 0
             ? [...new Set([...state.deletedEdgeIds, ...simRemovedIds])]
             : state.deletedEdgeIds,
-          userAddedEdges: state.userAddedEdges.filter((e) => !removedIds.includes(e.id)),
+          userAddedEdges: remainingPresetEdges.filter((e) => !removedIds.includes(e.id)),
           currentSystem: 'custom',
         };
       });
@@ -645,38 +824,77 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
       id,
       source: connection.source!,
       target: connection.target!,
-      sourceHandle: connection.sourceHandle ?? undefined,
-      targetHandle: connection.targetHandle ?? undefined,
+      sourceHandle: normalizeHandleId(connection.sourceHandle),
+      targetHandle: normalizeHandleId(connection.targetHandle),
       kind,
     };
-    set((state) => ({
-      userAddedEdges: [
-        ...state.userAddedEdges.filter((e) => !(e.source === connection.source && e.target === connection.target)),
-        userEdge,
-      ],
-      deletedEdgeIds: state.deletedEdgeIds.filter((did) => did !== id),
-    }));
+    set((state) => {
+      const baseEdges: UserEdge[] = state.currentSystem !== 'custom'
+        ? state.edges.map((edge) => ({
+            id: edge.id.startsWith('user-') ? edge.id : `user-${edge.source}-${edge.target}-${edge.data?.kind ?? 'request'}`,
+            source: edge.source,
+            target: edge.target,
+            sourceHandle: normalizeHandleId(edge.sourceHandle),
+            targetHandle: normalizeHandleId(edge.targetHandle),
+            kind: (edge.data?.kind ?? 'request') as 'request' | 'data',
+          }))
+        : state.userAddedEdges;
+      return {
+        userAddedEdges: [
+          ...baseEdges.filter((e) => !(e.source === connection.source && e.target === connection.target)),
+          userEdge,
+        ],
+        deletedEdgeIds: state.deletedEdgeIds.filter((did) => did !== id),
+        currentSystem: 'custom',
+      };
+    });
     get().runSimulation();
   },
 
   updateEdgeKind: (edgeId: string, kind: 'request' | 'data') => {
     const existingEdge = get().userAddedEdges.find((edge) => edge.id === edgeId);
-    if (!existingEdge || existingEdge.kind === kind) return;
 
-    pushHistory();
-    set((state) => {
-      const nextId = `user-${existingEdge.source}-${existingEdge.target}-${kind}`;
-
-      return {
-        userAddedEdges: state.userAddedEdges.map((edge) =>
-          edge.id === edgeId
-            ? { ...edge, id: nextId, kind }
-            : edge
-        ),
-        deletedEdgeIds: state.deletedEdgeIds.filter((id) => id !== nextId),
-        currentSystem: 'custom',
+    if (existingEdge) {
+      if (existingEdge.kind === kind) return;
+      pushHistory();
+      set((state) => {
+        const nextId = `user-${existingEdge.source}-${existingEdge.target}-${kind}`;
+        return {
+          userAddedEdges: state.userAddedEdges.map((edge) =>
+            edge.id === edgeId
+              ? { ...edge, id: nextId, kind }
+              : edge
+          ),
+          deletedEdgeIds: state.deletedEdgeIds.filter((id) => id !== nextId),
+          currentSystem: 'custom',
+        };
+      });
+    } else {
+      // Edge is rendered (e.g. inferred) but not yet in userAddedEdges — promote it
+      const renderedEdge = get().edges.find((e) => e.id === edgeId);
+      if (!renderedEdge || renderedEdge.data?.kind === kind) return;
+      pushHistory();
+      const nextId = `user-${renderedEdge.source}-${renderedEdge.target}-${kind}`;
+      const promoted: UserEdge = {
+        id: nextId,
+        source: renderedEdge.source,
+        target: renderedEdge.target,
+        sourceHandle: normalizeHandleId(renderedEdge.sourceHandle),
+        targetHandle: normalizeHandleId(renderedEdge.targetHandle),
+        kind,
       };
-    });
+      set((state) => ({
+        userAddedEdges: [
+          ...state.userAddedEdges.filter(
+            (e) => !(e.source === promoted.source && e.target === promoted.target)
+          ),
+          promoted,
+        ],
+        deletedEdgeIds: [...state.deletedEdgeIds.filter((id) => id !== nextId), edgeId],
+        currentSystem: 'custom',
+      }));
+    }
+
     get().runSimulation();
   },
 
@@ -685,12 +903,26 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
     const layer = LAYERS.find((l) => l.type === type);
     if (!layer) return;
     const state = get();
+    const snapshotEdges = (s: SimulationStore): UserEdge[] =>
+      s.currentSystem !== 'custom'
+        ? s.edges.map((edge) => ({
+            id: edge.id.startsWith('user-') ? edge.id : `user-${edge.source}-${edge.target}-${edge.data?.kind ?? 'request'}`,
+            source: edge.source,
+            target: edge.target,
+            sourceHandle: normalizeHandleId(edge.sourceHandle),
+            targetHandle: normalizeHandleId(edge.targetHandle),
+            kind: (edge.data?.kind ?? 'request') as 'request' | 'data',
+          }))
+        : s.userAddedEdges;
+
     // Already present — just enable it
     if ((state.nodeCounts[layer.id] || 0) >= 1) {
       if (!state.enabledLayers.includes(layer.id)) {
         set((s) => ({
           nodeCounts: { ...s.nodeCounts, [layer.id]: 1 },
           enabledLayers: [...s.enabledLayers, layer.id],
+          userAddedEdges: snapshotEdges(s),
+          currentSystem: 'custom',
         }));
         get().runSimulation();
       }
@@ -704,6 +936,8 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
       nodeCounts: { ...s.nodeCounts, [layer.id]: INITIAL_COUNTS[layer.id as keyof typeof INITIAL_COUNTS] || 1 },
       enabledLayers: s.enabledLayers.includes(layer.id) ? s.enabledLayers : [...s.enabledLayers, layer.id],
       customNodePositions: { ...s.customNodePositions, [layer.id]: s.customNodePositions[layer.id] ?? defaultPos },
+      userAddedEdges: snapshotEdges(s),
+      currentSystem: 'custom',
     }));
     get().runSimulation();
   },
@@ -806,10 +1040,36 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
       }));
     } else {
       const currentCount = state.nodeCounts[layerId] ?? 0;
+      const visibleEdges = state.currentSystem === 'custom'
+        ? state.userAddedEdges
+        : state.edges
+            .map((edge) => ({
+              id: edge.id.startsWith('user-')
+                ? edge.id
+                : `user-${edge.source}-${edge.target}-${edge.data?.kind ?? 'request'}`,
+              source: edge.source,
+              target: edge.target,
+              sourceHandle: normalizeHandleId(edge.sourceHandle),
+              targetHandle: normalizeHandleId(edge.targetHandle),
+              kind: edge.data?.kind ?? 'request',
+            }));
+      const hasNoSql = (state.nodeCounts['nosql-db'] || 0) > 0;
+      const bypassEdges = inferBypassEdgesForRemovedNode(visibleEdges, layerId, hasNoSql);
+      const remainingVisibleEdges = [...visibleEdges, ...bypassEdges]
+        .filter((edge) => edge.source !== layerId && edge.target !== layerId)
+        .reduce<UserEdge[]>((acc, edge) => {
+          const exists = acc.some((existing) =>
+            existing.source === edge.source &&
+            existing.target === edge.target &&
+            existing.kind === edge.kind
+          );
+          return exists ? acc : [...acc, edge];
+        }, []);
       set((s) => ({
         nodeCounts: { ...s.nodeCounts, [layerId]: 0 },
         savedNodeCounts: { ...s.savedNodeCounts, [layerId]: currentCount },
         enabledLayers: s.enabledLayers.filter((id) => id !== layerId),
+        userAddedEdges: remainingVisibleEdges,
         currentSystem: 'custom',
       }));
     }
@@ -948,102 +1208,6 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
     const updatedPositions = { ...customNodePositions };
     newNodes.forEach((n) => { updatedPositions[n.id] = n.position; });
 
-    // ── Custom topology: graph-based load propagation using user-drawn edges ──
-    if (currentSystem === 'custom') {
-      const nodeMap = new Map(newNodes.map((n) => [n.id, n]));
-
-      // Derive background load for data pipeline edges
-      const bgResult = deriveBackgroundLoads({
-        sourceJobTypes, refreshCadence, queueDepth, averageJobCost, retryRate,
-        batchSize, derivedStateCadence, backfillMode, recoveryMode, processorLag,
-        processingMode, objectStoreScanCost, maxBackgroundConcurrency,
-      });
-      const bgLoad = Math.max(bgResult.sourceFreshnessPressure + bgResult.processorLoad, 1);
-
-      // Build outgoing edge map for user-added edges between existing nodes
-      const validEdges = userAddedEdges.filter(
-        (e) => nodeMap.has(e.source) && nodeMap.has(e.target),
-      );
-      const outgoing = new Map<string, UserEdge[]>();
-      validEdges.forEach((e) => {
-        if (!outgoing.has(e.source)) outgoing.set(e.source, []);
-        outgoing.get(e.source)!.push(e);
-      });
-
-      // Propagate request load via BFS from client nodes
-      const requestTargets = new Set(validEdges.filter((e) => e.kind === 'request').map((e) => e.target));
-      const nodeLoad = new Map<string, number>();
-      const edgeLoad = new Map<string, number>();
-
-      // Seed: client-type nodes (or nodes with no incoming request edges)
-      newNodes.forEach((n) => {
-        if (n.data.type === 'client' || !requestTargets.has(n.id)) {
-          if (n.data.type === 'client') nodeLoad.set(n.id, totalQps);
-        }
-      });
-
-      const visited = new Set<string>();
-      const queue = newNodes.filter((n) => n.data.type === 'client').map((n) => n.id);
-
-      while (queue.length > 0) {
-        const nid = queue.shift()!;
-        if (visited.has(nid)) continue;
-        visited.add(nid);
-
-        const load = nodeLoad.get(nid) ?? 0;
-        const outs = outgoing.get(nid) ?? [];
-        const reqOuts = outs.filter((e) => e.kind === 'request');
-        const dataOuts = outs.filter((e) => e.kind === 'data');
-
-        if (reqOuts.length > 0) {
-          const perEdge = load / reqOuts.length;
-          reqOuts.forEach((e) => {
-            edgeLoad.set(e.id, perEdge);
-            nodeLoad.set(e.target, (nodeLoad.get(e.target) ?? 0) + perEdge);
-            if (!visited.has(e.target)) queue.push(e.target);
-          });
-        }
-
-        if (dataOuts.length > 0) {
-          const perEdge = bgLoad / dataOuts.length;
-          dataOuts.forEach((e) => {
-            edgeLoad.set(e.id, perEdge);
-            nodeLoad.set(e.target, (nodeLoad.get(e.target) ?? 0) + perEdge);
-            if (!visited.has(e.target)) queue.push(e.target);
-          });
-        }
-      }
-
-      // Apply loads and compute status
-      newNodes.forEach((node) => {
-        node.data.currentLoad = nodeLoad.get(node.id) ?? 0;
-        const cap = node.data.instances * node.data.maxCapacityPerInstance;
-        const ratio = cap > 0 ? node.data.currentLoad / cap : 0;
-        if (ratio > 1.0) node.data.status = 'overloaded';
-        else if (ratio > 0.8) node.data.status = 'stressed';
-        else if (node.data.currentLoad === 0) node.data.status = 'idle';
-        else node.data.status = 'healthy';
-      });
-
-      const customEdges = validEdges.map((ue) => ({
-        id: ue.id,
-        source: ue.source,
-        target: ue.target,
-        sourceHandle: ue.sourceHandle,
-        targetHandle: ue.targetHandle,
-        type: 'custom' as const,
-        zIndex: 10,
-        data: { throughput: edgeLoad.get(ue.id) ?? 0, kind: ue.kind },
-      }));
-
-      set({ nodes: newNodes, edges: customEdges, customNodePositions: updatedPositions });
-      return;
-    }
-
-    const nodeMap = new Map(newNodes.map((node) => [node.id, node]));
-
-    const readTraffic = totalQps * readWriteRatio;
-    const writeTraffic = totalQps * (1 - readWriteRatio);
     const effectiveCacheHitRate = clamp(
       cacheHitRate * (0.55 + cacheWorkingSetFit * 0.75) * (1 - cacheInvalidationRate * 0.35),
       0.05,
@@ -1052,15 +1216,6 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
     const serviceFanoutFactor = clamp(1 + (serviceFanout - 1) * 0.35, 1, 3.5);
     const hasNoSql = (nodeCounts['nosql-db'] || 0) > 0;
     const relationalReadShare = getRelationalReadShare(relationalReplicationMode, hasNoSql);
-    const edgeMisses = readTraffic * (1 - cdnHitRate) + writeTraffic;
-    const servingReads = readTraffic * (1 - cdnHitRate);
-    const cacheLookups = servingReads * serviceFanoutFactor;
-    const dbServingReads = cacheLookups * (1 - effectiveCacheHitRate);
-    const relationalReadLoad = dbServingReads * relationalReadShare;
-    const nosqlReadLoad = hasNoSql ? dbServingReads - relationalReadLoad : 0;
-    const foregroundWriteLoad = writeTraffic * clamp(0.6 + databaseWriteLoad * 1.8, 0.6, 2.4);
-    const cacheInvalidationLoad = writeTraffic * cacheInvalidationRate * 0.9;
-    const nonDataApiTraffic = writeTraffic * clamp(0.4 + databaseWriteLoad * 0.8, 0.4, 1.2);
 
     const {
       sourceFreshnessPressure,
@@ -1081,26 +1236,68 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
       objectStoreScanCost,
       maxBackgroundConcurrency,
     });
+    const nodeMap = new Map(newNodes.map((node) => [node.id, node]));
+    const activeIds = new Set(newNodes.map((node) => node.id));
+    const visibleEdges = buildVisibleTopologyEdges(currentSystem, activeIds, userAddedEdges, deletedEdgeIds, hasNoSql);
+    const outgoingRequest = new Map<string, ResolvedTopologyEdge[]>();
+    const outgoingData = new Map<string, ResolvedTopologyEdge[]>();
+    const incomingRequest = new Map<string, ResolvedTopologyEdge[]>();
 
+    visibleEdges.forEach((edge) => {
+      const outgoingMap = edge.kind === 'request' ? outgoingRequest : outgoingData;
+      if (!outgoingMap.has(edge.source)) outgoingMap.set(edge.source, []);
+      outgoingMap.get(edge.source)!.push(edge);
+
+      if (edge.kind === 'request') {
+        if (!incomingRequest.has(edge.target)) incomingRequest.set(edge.target, []);
+        incomingRequest.get(edge.target)!.push(edge);
+      }
+    });
+
+    const edgeLoad = new Map<string, number>();
+    const requestIncoming = new Map<string, number>();
+    requestIncoming.set('client', totalQps);
+
+    const queue: string[] = ['client'];
+    const requestVisited = new Set<string>();
+
+    while (queue.length > 0) {
+      const nodeId = queue.shift()!;
+      if (requestVisited.has(nodeId)) continue;
+      requestVisited.add(nodeId);
+
+      const node = nodeMap.get(nodeId);
+      if (!node) continue;
+
+      const outgoing = (outgoingRequest.get(nodeId) ?? []).filter((edge) => edge.target !== 'cache' && !SERVING_DB_TYPES.has(nodeMap.get(edge.target)?.data.type ?? 'client'));
+      if (outgoing.length === 0) continue;
+
+      const incoming = requestIncoming.get(nodeId) ?? 0;
+      if (incoming <= 0) continue;
+
+      let outgoingVolume = incoming;
+      if (node.data.type === 'cdn') {
+        outgoingVolume = incoming * (1 - readWriteRatio * cdnHitRate);
+      }
+
+      const perEdge = outgoingVolume / outgoing.length;
+      outgoing.forEach((edge) => {
+        pushEdgeFlow(edgeLoad, requestIncoming, edge, perEdge);
+        queue.push(edge.target);
+      });
+    }
+
+    const serviceIngress = requestIncoming.get('service') ?? 0;
+    const effectiveReadTraffic = serviceIngress * readWriteRatio;
+    const effectiveWriteTraffic = serviceIngress * (1 - readWriteRatio);
+    const effectiveCacheLookups = effectiveReadTraffic * serviceFanoutFactor;
     const durableStoreLoad =
       sumLoads(sourceFreshnessPressure, processorLoad) * clamp(0.7 + objectStoreScanCost * 0.6, 0.7, 1.4);
     const backgroundDbWriteDemand = processorLoad * clamp(0.65 + databaseWriteLoad * 0.7, 0.65, 1.35);
 
-    distribute(nodeMap, 'client', totalQps);
-    distribute(nodeMap, 'cdn', totalQps);
-    distribute(nodeMap, 'load-balancer', edgeMisses);
-    distribute(nodeMap, 'service', edgeMisses * clamp(0.8 + serviceFanout * 0.15, 0.8, 2.4));
-    distribute(nodeMap, 'cache', cacheLookups + cacheInvalidationLoad);
-    distribute(nodeMap, 'relational-db', relationalReadLoad + nonDataApiTraffic + foregroundWriteLoad);
-    distribute(nodeMap, 'nosql-db', nosqlReadLoad + processorLoad * 0.35);
-    distribute(nodeMap, 'message-queue', schedulerCoordinationLoad);
-    distribute(nodeMap, 'worker', sourceFreshnessPressure);
-    distribute(nodeMap, 'object-store', durableStoreLoad);
-    distribute(nodeMap, 'batch-processor', processorLoad);
-
     const rawAppCapacity = nodeCounts.service * nodeCapacities.service;
     const totalAppCapacity = Number.isFinite(rawAppCapacity) && rawAppCapacity > 0 ? rawAppCapacity : 1;
-    const apiReadPressure = servingReads / totalAppCapacity;
+    const apiReadPressure = effectiveReadTraffic / totalAppCapacity;
     let gateDrainShare = 1;
     let backgroundStatus: NodeStatus = 'healthy';
 
@@ -1120,8 +1317,84 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
     const actualBackgroundDbTraffic = backgroundDbWriteDemand * gateDrainShare;
     const relationalBackgroundWriteShare = hasNoSql ? 0.45 : 1;
     const nosqlBackgroundWriteShare = hasNoSql ? 0.55 : 0;
-    distribute(nodeMap, 'relational-db', actualBackgroundDbTraffic * relationalBackgroundWriteShare);
-    distribute(nodeMap, 'nosql-db', actualBackgroundDbTraffic * nosqlBackgroundWriteShare);
+
+    const serviceCacheEdges = (outgoingRequest.get('service') ?? []).filter((edge) => nodeMap.get(edge.target)?.data.type === 'cache');
+    const cacheNodeIds = serviceCacheEdges.map((edge) => edge.target);
+    const cacheDbEdges = visibleEdges.filter((edge) => cacheNodeIds.includes(edge.source) && SERVING_DB_TYPES.has(nodeMap.get(edge.target)?.data.type ?? 'client'));
+    const directServiceDbEdges = visibleEdges.filter((edge) => edge.source === 'service' && SERVING_DB_TYPES.has(nodeMap.get(edge.target)?.data.type ?? 'client'));
+    const relationalServiceEdges = directServiceDbEdges.filter((edge) => edge.target === 'relational-db');
+    const nosqlServiceEdges = directServiceDbEdges.filter((edge) => edge.target === 'nosql-db');
+    const relationalCacheEdges = cacheDbEdges.filter((edge) => edge.target === 'relational-db');
+    const nosqlCacheEdges = cacheDbEdges.filter((edge) => edge.target === 'nosql-db');
+    const hasServingCache = serviceCacheEdges.length > 0;
+    const directDbServingReads = hasServingCache ? 0 : effectiveReadTraffic * serviceFanoutFactor;
+    const cacheMissTraffic = hasServingCache ? effectiveCacheLookups * (1 - effectiveCacheHitRate) : 0;
+    const relationalDirectReadLoad = directDbServingReads * relationalReadShare;
+    const nosqlDirectReadLoad = hasNoSql ? directDbServingReads - relationalDirectReadLoad : 0;
+    const relationalCacheReadLoad = cacheMissTraffic * relationalReadShare;
+    const nosqlCacheReadLoad = hasNoSql ? cacheMissTraffic - relationalCacheReadLoad : 0;
+
+    if (hasServingCache) {
+      const perCacheEdge = effectiveCacheLookups / serviceCacheEdges.length;
+      serviceCacheEdges.forEach((edge) => {
+        pushEdgeFlow(edgeLoad, requestIncoming, edge, perCacheEdge);
+      });
+    }
+
+    const distributeByEdges = (edges: ResolvedTopologyEdge[], throughput: number) => {
+      if (edges.length === 0 || throughput <= 0) return;
+      const perEdge = throughput / edges.length;
+      edges.forEach((edge) => {
+        pushEdgeFlow(edgeLoad, requestIncoming, edge, perEdge);
+      });
+    };
+
+    distributeByEdges(relationalCacheEdges, relationalCacheReadLoad);
+    distributeByEdges(nosqlCacheEdges, nosqlCacheReadLoad);
+
+    const relationalWriteLoad = effectiveWriteTraffic;
+    const nosqlWriteLoad = 0;
+    distributeByEdges(relationalServiceEdges, relationalWriteLoad + relationalDirectReadLoad);
+    distributeByEdges(nosqlServiceEdges, nosqlWriteLoad + nosqlDirectReadLoad);
+
+    const queueWorkerEdges = (outgoingData.get('message-queue') ?? []).filter((edge) => nodeMap.get(edge.target)?.data.type === 'worker');
+    const workerStoreEdges = (outgoingData.get('worker') ?? []).filter((edge) => nodeMap.get(edge.target)?.data.type === 'object-store');
+    const queueBatchEdges = (outgoingData.get('message-queue') ?? []).filter((edge) => nodeMap.get(edge.target)?.data.type === 'batch-processor');
+    const workerBatchEdges = (outgoingData.get('worker') ?? []).filter((edge) => nodeMap.get(edge.target)?.data.type === 'batch-processor');
+    const storeBatchEdges = (outgoingData.get('object-store') ?? []).filter((edge) => nodeMap.get(edge.target)?.data.type === 'batch-processor');
+    const batchDbEdges = (outgoingData.get('batch-processor') ?? []).filter((edge) => SERVING_DB_TYPES.has(nodeMap.get(edge.target)?.data.type ?? 'client'));
+
+    distributeByEdges(queueWorkerEdges, sourceFreshnessPressure);
+    distributeByEdges(workerStoreEdges, sourceFreshnessPressure);
+    distributeByEdges(queueBatchEdges, processorLoad);
+    distributeByEdges(workerBatchEdges, processorLoad);
+    distributeByEdges(storeBatchEdges, processorLoad);
+    distributeByEdges(
+      batchDbEdges.filter((edge) => edge.target === 'relational-db'),
+      actualBackgroundDbTraffic * relationalBackgroundWriteShare,
+    );
+    distributeByEdges(
+      batchDbEdges.filter((edge) => edge.target === 'nosql-db'),
+      actualBackgroundDbTraffic * nosqlBackgroundWriteShare,
+    );
+
+    newNodes.forEach((node) => {
+      node.data.currentLoad = 0;
+    });
+
+    distribute(nodeMap, 'client', totalQps);
+    distribute(nodeMap, 'cdn', requestIncoming.get('cdn') ?? 0);
+    distribute(nodeMap, 'load-balancer', requestIncoming.get('load-balancer') ?? 0);
+    distribute(nodeMap, 'service', serviceIngress * clamp(0.8 + serviceFanout * 0.15, 0.8, 2.4));
+    if (hasServingCache) {
+      distribute(nodeMap, 'cache', effectiveCacheLookups + effectiveWriteTraffic * cacheInvalidationRate * 0.9);
+    }
+    distribute(nodeMap, 'relational-db', relationalCacheReadLoad + relationalDirectReadLoad + relationalWriteLoad + actualBackgroundDbTraffic * relationalBackgroundWriteShare);
+    distribute(nodeMap, 'nosql-db', nosqlCacheReadLoad + nosqlDirectReadLoad + actualBackgroundDbTraffic * nosqlBackgroundWriteShare);
+    distribute(nodeMap, 'message-queue', schedulerCoordinationLoad);
+    distribute(nodeMap, 'worker', sourceFreshnessPressure);
+    distribute(nodeMap, 'object-store', durableStoreLoad);
+    distribute(nodeMap, 'batch-processor', processorLoad);
 
     newNodes.forEach((node) => {
       const totalCapacity = node.data.instances * node.data.maxCapacityPerInstance;
@@ -1143,64 +1416,18 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
       }
     });
 
-    const newEdges: Edge<EdgeData>[] = [];
-    const connect = (
-      source: string,
-      target: string,
-      throughput: number,
-      kind: EdgeData['kind'],
-      route?: EdgeRoute,
-    ) => {
-      if (!nodeMap.has(source) || !nodeMap.has(target) || throughput <= 0) return;
-      newEdges.push({
-        id: `e-${source}-${target}-${kind}`,
-        source,
-        target,
-        sourceHandle: route?.sourceHandle,
-        targetHandle: route?.targetHandle,
-        type: 'custom',
-        zIndex: 10,
-        data: { throughput, kind },
-      });
-    };
+    const newEdges: Edge<EdgeData>[] = visibleEdges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle,
+      type: 'custom',
+      zIndex: 10,
+      data: { throughput: edgeLoad.get(edge.id) ?? 0, kind: edge.kind },
+    }));
 
-    // Serving path
-    if ((nodeCounts.cdn || 0) > 0) {
-      connect('client', 'cdn', totalQps, 'request', { sourceHandle: 'source-right', targetHandle: 'target-left' });
-      connect('cdn', 'load-balancer', edgeMisses, 'request', { sourceHandle: 'source-right', targetHandle: 'target-left' });
-    } else {
-      connect('client', 'load-balancer', totalQps, 'request', { sourceHandle: 'source-right', targetHandle: 'target-left' });
-    }
-    connect('load-balancer', 'service', edgeMisses, 'request', { sourceHandle: 'source-right', targetHandle: 'target-left' });
-    connect('service', 'cache', cacheLookups, 'request', { sourceHandle: 'source-bottom', targetHandle: 'target-left' });
-    connect('cache', hasNoSql ? 'nosql-db' : 'relational-db', hasNoSql ? nosqlReadLoad : dbServingReads, 'request', { sourceHandle: 'source-right', targetHandle: 'target-bottom' });
-    if (hasNoSql) {
-      connect('cache', 'relational-db', relationalReadLoad, 'request', { sourceHandle: 'source-right', targetHandle: 'target-top-left' });
-    }
-    connect('service', 'relational-db', sumLoads(nonDataApiTraffic, foregroundWriteLoad), 'data', { sourceHandle: 'source-right', targetHandle: 'target-left' });
-
-    // Background pipeline
-    connect('message-queue', 'worker', sourceFreshnessPressure, 'data', { sourceHandle: 'source-right', targetHandle: 'target-left' });
-    connect('worker', 'object-store', sourceFreshnessPressure, 'data', { sourceHandle: 'source-right', targetHandle: 'target-left' });
-    connect('message-queue', 'batch-processor', processorLoad, 'data', { sourceHandle: 'source-right-upper', targetHandle: 'target-left-upper' });
-    connect('object-store', 'batch-processor', processorLoad, 'data', { sourceHandle: 'source-right', targetHandle: 'target-left-lower' });
-    connect('batch-processor', hasNoSql ? 'nosql-db' : 'relational-db', processorLoad, 'data', { sourceHandle: 'source-top-left', targetHandle: 'target-bottom' });
-
-    // For presets: apply deleted edge overrides, then append any user-added edges
-    const filteredEdges = newEdges.filter((e) => !deletedEdgeIds.includes(e.id));
-    const userEdgesForPreset = userAddedEdges
-      .filter((ue) => nodeMap.has(ue.source) && nodeMap.has(ue.target) && !deletedEdgeIds.includes(ue.id))
-      .map((ue) => ({
-        id: ue.id,
-        source: ue.source,
-        target: ue.target,
-        sourceHandle: ue.sourceHandle,
-        targetHandle: ue.targetHandle,
-        type: 'custom' as const,
-        zIndex: 10,
-        data: { throughput: nodeMap.get(ue.source)?.data.currentLoad ?? 0, kind: ue.kind } as EdgeData,
-      }));
-    set({ nodes: newNodes, edges: [...filteredEdges, ...userEdgesForPreset], customNodePositions: updatedPositions });
+    set({ nodes: newNodes, edges: newEdges, customNodePositions: updatedPositions });
   },
 });
 });

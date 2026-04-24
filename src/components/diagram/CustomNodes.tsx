@@ -16,17 +16,10 @@ import {
   Router,
   ServerCog,
   Waypoints,
+  X,
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { formatK } from '../../utils/format';
-
-// Handle position constants
-const HANDLE_POS = {
-  UPPER: '34%',
-  LOWER: '70%',
-  LEFT_THIRD: '32%',
-  RIGHT_THIRD: '68%',
-} as const;
 
 const IconMap = {
   client: MonitorSmartphone,
@@ -63,6 +56,8 @@ const StatusColors = {
   idle: 'border-gray-300 bg-gray-50 dark:bg-gray-800/20',
 };
 
+const NON_REMOVABLE_NODE_IDS = new Set(['client']);
+
 function SectionTitle({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-2">
@@ -76,11 +71,12 @@ function SectionTitle({ title }: { title: string }) {
 }
 
 const CustomNodeInner = ({ id, data }: NodeProps<NodeData>) => {
-  const { showNodeConfig, updateImplementationLabel } = useSimulatorStore();
+  const { showNodeConfig, updateImplementationLabel, setLayerEnabled } = useSimulatorStore();
   const Icon = IconMap[data.type] || ServerCog;
   const statusColor = StatusColors[data.status];
   const typeColor = TypeColors[data.type] || 'bg-blue-500';
   const handleClassName = "!w-4 !h-4 !bg-blue-500 !opacity-0 group-hover:!opacity-50 hover:!opacity-100 !rounded-full !border-2 !border-white dark:!border-gray-900 !transition-opacity !duration-150";
+  const canRemoveNode = !NON_REMOVABLE_NODE_IDS.has(id);
 
   const stackLayers = Math.min(data.instances, 4) - 1; // 0-3 shadow layers behind
   const loadPercent = (data.currentLoad / (data.instances * data.maxCapacityPerInstance)) * 100;
@@ -91,12 +87,6 @@ const CustomNodeInner = ({ id, data }: NodeProps<NodeData>) => {
       <Handle id="target-top" type="target" position={Position.Top} className={handleClassName} />
       <Handle id="target-right" type="target" position={Position.Right} className={handleClassName} />
       <Handle id="target-bottom" type="target" position={Position.Bottom} className={handleClassName} />
-      <Handle id="target-left-upper" type="target" position={Position.Left} className={handleClassName} style={{ top: HANDLE_POS.UPPER }} />
-      <Handle id="target-left-lower" type="target" position={Position.Left} className={handleClassName} style={{ top: HANDLE_POS.LOWER }} />
-      <Handle id="target-right-upper" type="target" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.UPPER }} />
-      <Handle id="target-right-lower" type="target" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.LOWER }} />
-      <Handle id="target-top-left" type="target" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.LEFT_THIRD }} />
-      <Handle id="target-top-right" type="target" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.RIGHT_THIRD }} />
 
       {/* Stacked card shadows for multi-instance */}
       {Array.from({ length: stackLayers }).map((_, i) => (
@@ -123,32 +113,48 @@ const CustomNodeInner = ({ id, data }: NodeProps<NodeData>) => {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.08),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(15,23,42,0.05))] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.04),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(2,6,23,0.10))]" />
 
         <div className="relative px-4 py-3">
-          <div className="flex items-center">
-            <div
-              className={cn(
-                'rounded-full p-2 shadow-sm mr-2 border border-gray-100 dark:border-gray-800',
-                typeColor,
-              )}
-            >
-              <Icon size={20} className="text-white" />
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center min-w-0">
+              <div
+                className={cn(
+                  'rounded-full p-2 shadow-sm mr-2 border border-gray-100 dark:border-gray-800',
+                  typeColor,
+                )}
+              >
+                <Icon size={20} className="text-white" />
+              </div>
+              <div className="ml-2 min-w-0">
+                <div className="text-xs font-black text-gray-900 dark:text-gray-100 uppercase tracking-wider">{data.label}</div>
+                {data.implementationLabel != null && (
+                  showNodeConfig ? (
+                    <input
+                      className="nodrag text-[9px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wider bg-transparent border-b border-dashed border-gray-300 dark:border-gray-600 outline-none w-full focus:border-blue-400"
+                      value={data.implementationLabel}
+                      onChange={(e) => updateImplementationLabel(id, e.target.value)}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <div className="text-[9px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wider">
+                      {data.implementationLabel}
+                    </div>
+                  )
+                )}
+              </div>
             </div>
-            <div className="ml-2">
-              <div className="text-xs font-black text-gray-900 dark:text-gray-100 uppercase tracking-wider">{data.label}</div>
-              {data.implementationLabel != null && (
-                showNodeConfig ? (
-                  <input
-                    className="nodrag text-[9px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wider bg-transparent border-b border-dashed border-gray-300 dark:border-gray-600 outline-none w-full focus:border-blue-400"
-                    value={data.implementationLabel}
-                    onChange={(e) => updateImplementationLabel(id, e.target.value)}
-                    onMouseDown={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <div className="text-[9px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wider">
-                    {data.implementationLabel}
-                  </div>
-                )
-              )}
-            </div>
+
+            {showNodeConfig && canRemoveNode && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLayerEnabled(id, false);
+                }}
+                className="nodrag shrink-0 p-1.5 rounded-full border border-red-200/80 dark:border-red-800/80 text-red-400 hover:text-red-500 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer bg-white/70 dark:bg-slate-900/50"
+                aria-label={`Delete ${data.label}`}
+                title={`Delete ${data.label}`}
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
 
           {data.type !== 'client' && (
@@ -189,10 +195,6 @@ const CustomNodeInner = ({ id, data }: NodeProps<NodeData>) => {
       <Handle id="source-top" type="source" position={Position.Top} className={handleClassName} />
       <Handle id="source-right" type="source" position={Position.Right} className={handleClassName} />
       <Handle id="source-bottom" type="source" position={Position.Bottom} className={handleClassName} />
-      <Handle id="source-right-upper" type="source" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.UPPER }} />
-      <Handle id="source-right-lower" type="source" position={Position.Right} className={handleClassName} style={{ top: HANDLE_POS.LOWER }} />
-      <Handle id="source-top-left" type="source" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.LEFT_THIRD }} />
-      <Handle id="source-top-right" type="source" position={Position.Top} className={handleClassName} style={{ left: HANDLE_POS.RIGHT_THIRD }} />
     </div>
   );
 };

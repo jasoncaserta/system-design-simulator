@@ -19,6 +19,14 @@ interface Vector {
 }
 
 type Lane = 'spine' | 'serving' | 'background' | 'backgroundLow';
+type AnchorDirection = 'right' | 'below' | 'belowRight';
+
+interface AnchorRule {
+  anchor: string;
+  direction: AnchorDirection;
+  dx?: number;
+  dy?: number;
+}
 
 const DEFAULT_NODE_WIDTH = 220;
 const DEFAULT_NODE_HEIGHT = 170;
@@ -31,15 +39,22 @@ const COLLISION_PUSH = 0.42;
 const EDGE_NODE_PUSH = 0.38;
 const REPULSION = 65_000;
 const X_ANCHOR = 0.14;
-const Y_ANCHOR = 0.06;
+const Y_ANCHOR = 0.022;
 const SPRING = 0.012;
 const DAMPING = 0.76;
 
 const LANE_Y: Record<Lane, number> = {
   spine: -280,
-  serving: 40,
-  background: 430,
-  backgroundLow: 760,
+  serving: -20,
+  background: 300,
+  backgroundLow: 520,
+};
+
+const LANE_STRENGTH: Record<Lane, number> = {
+  spine: 1,
+  serving: 0.4,
+  background: 0.32,
+  backgroundLow: 0.24,
 };
 
 const TYPE_X_RANK: Record<string, number> = {
@@ -56,12 +71,29 @@ const TYPE_X_RANK: Record<string, number> = {
   'batch-processor': 5.8,
 };
 
+const ANCHOR_RULES: Record<string, AnchorRule> = {
+  cdn: { anchor: 'client', direction: 'right' },
+  'load-balancer': { anchor: 'cdn', direction: 'right' },
+  service: { anchor: 'load-balancer', direction: 'right' },
+  cache: { anchor: 'service', direction: 'belowRight', dx: 120, dy: 150 },
+  'relational-db': { anchor: 'cache', direction: 'right', dx: 180, dy: -80 },
+  'nosql-db': { anchor: 'cache', direction: 'right', dx: 180, dy: -80 },
+  'message-queue': { anchor: 'client', direction: 'below', dx: 320, dy: 520 },
+  worker: { anchor: 'message-queue', direction: 'belowRight', dx: 40, dy: 170 },
+  'object-store': { anchor: 'worker', direction: 'right', dx: 120, dy: 0 },
+  'batch-processor': { anchor: 'relational-db', direction: 'below', dx: 0, dy: 370 },
+};
+
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 const getNodeWidth = (node: LayoutNode) => node.width ?? DEFAULT_NODE_WIDTH;
 const getNodeHeight = (node: LayoutNode) => node.height ?? DEFAULT_NODE_HEIGHT;
 const getNodePadX = (node: LayoutNode) => getNodeWidth(node) / 2 + NODE_MARGIN_X;
 const getNodePadY = (node: LayoutNode) => getNodeHeight(node) / 2 + NODE_MARGIN_Y;
+const toTopLeft = (node: LayoutNode, center: Vector): XYPosition => ({
+  x: center.x - getNodeWidth(node) / 2,
+  y: center.y - getNodeHeight(node) / 2,
+});
 
 const magnitude = (vector: Vector) => Math.hypot(vector.x, vector.y);
 
@@ -159,47 +191,78 @@ const buildPreferredPositions = (nodes: LayoutNode[], edges: LayoutEdge[]) => {
     edgeKinds.get(edge.target)?.add(edge.kind);
   });
 
-  const grouped = new Map<Lane, LayoutNode[]>();
-  (['spine', 'serving', 'background', 'backgroundLow'] as Lane[]).forEach((lane) => grouped.set(lane, []));
+  const positions: Record<string, Vector> = {};
+  const preferredLaneY: Record<string, number> = {};
+  const preferredLaneStrength: Record<string, number> = {};
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
 
-  nodes.forEach((node) => {
-    grouped.get(getLane(node.id, edgeKinds))!.push(node);
-  });
+  const placeNode = (nodeId: string, stack = new Set<string>()) => {
+    if (positions[nodeId]) return;
+    if (stack.has(nodeId)) return;
+    stack.add(nodeId);
 
-  const positions: Record<string, XYPosition> = {};
+    const node = nodeMap.get(nodeId);
+    if (!node) return;
+
+    const lane = getLane(node.id, edgeKinds);
+    preferredLaneY[node.id] = LANE_Y[lane];
+    preferredLaneStrength[node.id] = LANE_STRENGTH[lane];
+
+    const rule = ANCHOR_RULES[node.id];
+    if (rule && nodeMap.has(rule.anchor)) {
+      placeNode(rule.anchor, stack);
+      const anchorPos = positions[rule.anchor];
+      if (anchorPos) {
+        const dx = rule.dx ?? 0;
+        const dy = rule.dy ?? 0;
+        if (rule.direction === 'right') {
+          positions[node.id] = { x: anchorPos.x + X_SPACING + dx, y: anchorPos.y + dy };
+        } else if (rule.direction === 'below') {
+          positions[node.id] = { x: anchorPos.x + dx, y: anchorPos.y + 260 + dy };
+        } else {
+          positions[node.id] = { x: anchorPos.x + 0.8 * X_SPACING + dx, y: anchorPos.y + 220 + dy };
+        }
+        stack.delete(nodeId);
+        return;
+      }
+    }
+
+    const rank = TYPE_X_RANK[node.id] ?? depths.get(node.id) ?? node.order;
+    positions[node.id] = {
+      x: rank * X_SPACING,
+      y: LANE_Y[lane],
+    };
+    stack.delete(nodeId);
+  };
+
+  nodes
+    .slice()
+    .sort((a, b) => (TYPE_X_RANK[a.id] ?? depths.get(a.id) ?? a.order) - (TYPE_X_RANK[b.id] ?? depths.get(b.id) ?? b.order) || a.order - b.order)
+    .forEach((node) => placeNode(node.id));
+
+  const laneGroups = new Map<Lane, LayoutNode[]>();
+  (['spine', 'serving', 'background', 'backgroundLow'] as Lane[]).forEach((lane) => laneGroups.set(lane, []));
+  nodes.forEach((node) => laneGroups.get(getLane(node.id, edgeKinds))!.push(node));
 
   for (const lane of ['spine', 'serving', 'background', 'backgroundLow'] as Lane[]) {
-    const laneNodes = grouped.get(lane)!;
-    laneNodes.sort((a, b) => {
-      const ax = TYPE_X_RANK[a.id] ?? depths.get(a.id) ?? a.order;
-      const bx = TYPE_X_RANK[b.id] ?? depths.get(b.id) ?? b.order;
-      return ax - bx || a.order - b.order;
-    });
+    const laneNodes = laneGroups.get(lane)!;
+    laneNodes.sort((a, b) => positions[a.id].x - positions[b.id].x || a.order - b.order);
 
-    const xBuckets = new Map<number, LayoutNode[]>();
-    laneNodes.forEach((node) => {
-      const rank = Math.round((TYPE_X_RANK[node.id] ?? depths.get(node.id) ?? node.order) * 10) / 10;
-      if (!xBuckets.has(rank)) xBuckets.set(rank, []);
-      xBuckets.get(rank)!.push(node);
-    });
-
-    for (const [rank, bucket] of xBuckets.entries()) {
-      const bucketHeight = bucket.reduce((sum, node) => sum + getNodeHeight(node), 0) + Math.max(0, bucket.length - 1) * 90;
-      let currentY = LANE_Y[lane] - bucketHeight / 2;
-      bucket
-        .sort((a, b) => a.order - b.order)
-        .forEach((node) => {
-          const nodeHeight = getNodeHeight(node);
-          positions[node.id] = {
-            x: rank * X_SPACING,
-            y: currentY + nodeHeight / 2 - DEFAULT_NODE_HEIGHT / 2,
-          };
-          currentY += nodeHeight + 90;
-        });
+    for (let i = 0; i < laneNodes.length; i += 1) {
+      const current = laneNodes[i];
+      for (let j = 0; j < i; j += 1) {
+        const other = laneNodes[j];
+        if (Math.abs(positions[current.id].x - positions[other.id].x) > 240) continue;
+        const minGap = (getNodeHeight(current) + getNodeHeight(other)) / 2 + 90;
+        const actualGap = positions[current.id].y - positions[other.id].y;
+        if (Math.abs(actualGap) < minGap) {
+          positions[current.id].y = positions[other.id].y + minGap;
+        }
+      }
     }
   }
 
-  return positions;
+  return { positions, preferredLaneY, preferredLaneStrength };
 };
 
 export function layoutGraphNodes(
@@ -213,7 +276,7 @@ export function layoutGraphNodes(
     (edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target) && edge.source !== edge.target,
   );
 
-  const positions = buildPreferredPositions(nodes, validEdges);
+  const { positions, preferredLaneY, preferredLaneStrength } = buildPreferredPositions(nodes, validEdges);
   const preferred = Object.fromEntries(nodes.map((node) => [node.id, { ...positions[node.id] }]));
   const velocities = Object.fromEntries(nodes.map((node) => [node.id, { x: 0, y: 0 }]));
 
@@ -302,7 +365,9 @@ export function layoutGraphNodes(
     for (const node of nodes) {
       const target = preferred[node.id];
       forces[node.id].x += (target.x - positions[node.id].x) * X_ANCHOR;
-      forces[node.id].y += (target.y - positions[node.id].y) * Y_ANCHOR;
+      const laneTargetY = preferredLaneY[node.id] ?? target.y;
+      const laneStrength = preferredLaneStrength[node.id] ?? 0.3;
+      forces[node.id].y += (laneTargetY - positions[node.id].y) * Y_ANCHOR * laneStrength;
 
       velocities[node.id].x = (velocities[node.id].x + forces[node.id].x) * DAMPING;
       velocities[node.id].y = (velocities[node.id].y + forces[node.id].y) * DAMPING;
@@ -321,12 +386,12 @@ export function layoutGraphNodes(
   const centerY = (minY + maxY) / 2;
 
   return Object.fromEntries(
-    nodes.map((node) => [
-      node.id,
-      {
+    nodes.map((node) => {
+      const centered = {
         x: Math.round((positions[node.id].x - centerX) * 10) / 10,
         y: Math.round((positions[node.id].y - centerY) * 10) / 10,
-      },
-    ]),
+      };
+      return [node.id, toTopLeft(node, centered)];
+    }),
   );
 }

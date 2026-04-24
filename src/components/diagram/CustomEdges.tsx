@@ -24,7 +24,6 @@ export const CustomEdge = ({
   const throughput = data?.throughput || 0;
   const kind = data?.kind || 'request';
   const isRequestEdge = kind === 'request';
-  const isUserEdge = id.startsWith('user-');
 
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -37,12 +36,16 @@ export const CustomEdge = ({
   });
 
   const palette = isRequestEdge
-    ? { stroke: '#3b82f6', strokeBorder: '#bfdbfe', forwardFill: '#60a5fa', reverseFill: '#93c5fd', labelText: '#2563eb' }
-    : { stroke: '#f59e0b', strokeBorder: '#fde68a', forwardFill: '#fbbf24', reverseFill: '#fcd34d', labelText: '#d97706' };
+    ? { stroke: '#3b82f6', strokeBorder: '#bfdbfe', packetFill: '#38bdf8', labelText: '#2563eb' }
+    : { stroke: '#f59e0b', strokeBorder: '#fde68a', packetFill: '#f59e0b', labelText: '#d97706' };
 
   const duration = 2.0;
   const revDuration = 2.5;
   const packetCount = throughput > 0 ? Math.min(5, Math.max(1, Math.floor(Math.log10(throughput + 1) * 2))) : 0;
+  const packetRadius = isRequestEdge
+    ? Math.min(2.6, 1.6 + Math.log10(throughput + 1) * 0.35)
+    : Math.min(5.5, 3.4 + Math.log10(throughput + 1) * 0.65);
+  const reversePacketRadius = Math.min(2.2, 1.2 + Math.log10(throughput + 1) * 0.3);
 
   const edgeStyle = {
     ...style,
@@ -59,12 +62,12 @@ export const CustomEdge = ({
       {throughput > 0 && !selected && (
         <g key={`${id}-${edgePath}`}>
           {Array.from({ length: packetCount }).map((_, i) => (
-            <circle key={`p-fwd-${i}`} r={Math.min(4, 2 + Math.log10(throughput + 1))} fill={palette.forwardFill}>
+            <circle key={`p-fwd-${i}`} r={packetRadius} fill={palette.packetFill}>
               <animateMotion dur={`${duration}s`} repeatCount="indefinite" path={edgePath} begin={`${-((i * duration) / packetCount)}s`} />
             </circle>
           ))}
           {isRequestEdge && Array.from({ length: Math.min(2, packetCount) }).map((_, i) => (
-            <circle key={`p-rev-${i}`} r={Math.min(3, 1.5 + Math.log10(throughput + 1))} fill={palette.reverseFill} opacity={0.45}>
+            <circle key={`p-rev-${i}`} r={reversePacketRadius} fill={palette.packetFill} opacity={0.45}>
               <animateMotion dur={`${revDuration}s`} repeatCount="indefinite" path={edgePath} begin={`${-((i * revDuration) / 2)}s`} keyPoints="1;0" keyTimes="0;1" calcMode="linear" />
             </circle>
           ))}
@@ -80,32 +83,28 @@ export const CustomEdge = ({
       )}
 
       {selected && (
-        <foreignObject width={isUserEdge ? 200 : 72} height={32} x={labelX - (isUserEdge ? 100 : 36)} y={labelY - 16} requiredExtensions="http://www.w3.org/1999/xhtml">
+        <foreignObject width={200} height={32} x={labelX - 100} y={labelY - 16} requiredExtensions="http://www.w3.org/1999/xhtml">
           <div className="flex items-center gap-1 h-full">
-            {isUserEdge && (
-              <>
-                <button
-                  onClick={() => updateEdgeKind(id, 'request')}
-                  className={`px-2 py-1 text-[10px] font-bold rounded-l-full border cursor-pointer transition-colors ${
-                    isRequestEdge
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-blue-400'
-                  }`}
-                >
-                  Request
-                </button>
-                <button
-                  onClick={() => updateEdgeKind(id, 'data')}
-                  className={`px-2 py-1 text-[10px] font-bold rounded-r-full border cursor-pointer transition-colors ${
-                    !isRequestEdge
-                      ? 'bg-amber-500 text-white border-amber-500'
-                      : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-amber-400'
-                  }`}
-                >
-                  Data
-                </button>
-              </>
-            )}
+            <button
+              onClick={() => updateEdgeKind(id, 'request')}
+              className={`px-2 py-1 text-[10px] font-bold rounded-l-full border cursor-pointer transition-colors ${
+                isRequestEdge
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-blue-400'
+              }`}
+            >
+              Request Path
+            </button>
+            <button
+              onClick={() => updateEdgeKind(id, 'data')}
+              className={`px-2 py-1 text-[10px] font-bold rounded-r-full border cursor-pointer transition-colors ${
+                !isRequestEdge
+                  ? 'bg-amber-500 text-white border-amber-500'
+                  : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-amber-400'
+              }`}
+            >
+              Data Pipeline
+            </button>
             <button
               onClick={() => onEdgesChange([{ type: 'remove', id }])}
               className="p-1.5 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer transition-colors"
