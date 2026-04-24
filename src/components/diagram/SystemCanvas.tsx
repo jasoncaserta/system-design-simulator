@@ -8,8 +8,7 @@ import ReactFlow, {
   useReactFlow
 } from 'reactflow';
 import {
-  Archive, ChevronDown, ChevronUp, Cog, Cpu, Database, DatabaseZap,
-  Gauge, Globe, MonitorSmartphone, Plus, Redo2, Router, ServerCog, Settings, Share2, Undo2, Waypoints, X, Target,
+  ChevronDown, ChevronUp, Plus, Redo2, Settings, Share2, Undo2, X, Target,
 } from 'lucide-react';
 import { SCENARIOS } from '../../data/scenarios';
 import 'reactflow/dist/style.css';
@@ -19,9 +18,10 @@ import { CustomEdge } from './CustomEdges';
 import { cn } from '../../utils/cn';
 import { getServingMagnitude } from '../../utils/servingMagnitude';
 import { decodeConfig, encodeConfig } from '../../utils/shareCfg';
-import type { SharedConfig, NodeType } from '../../store/types';
+import type { SharedConfig } from '../../store/types';
 import { useShareUrl } from '../../hooks/useShareUrl';
 import { NewSystemModal } from './NewSystemModal';
+import { NODE_OPTIONS, NODE_OPTION_GROUPS } from '../../data/nodeOptions';
 import type { Connection } from 'reactflow';
 
 const nodeTypes = {
@@ -38,40 +38,6 @@ const FIT_VIEW_OPTIONS = {
 };
 
 const CONNECTION_RADIUS = 28;
-
-const NODE_PICKER_SECTIONS: { label: string; items: { type: NodeType; label: string; icon: React.ElementType; color: string }[] }[] = [
-  {
-    label: 'Ingress',
-    items: [
-      { type: 'client', label: 'Clients', icon: MonitorSmartphone, color: 'bg-sky-500' },
-      { type: 'cdn', label: 'Edge Cache', icon: Globe, color: 'bg-sky-500' },
-      { type: 'load-balancer', label: 'Load Balancer', icon: Router, color: 'bg-sky-500' },
-    ],
-  },
-  {
-    label: 'Serving',
-    items: [
-      { type: 'service', label: 'Service', icon: ServerCog, color: 'bg-violet-500' },
-      { type: 'cache', label: 'Cache', icon: Gauge, color: 'bg-violet-500' },
-    ],
-  },
-  {
-    label: 'Data',
-    items: [
-      { type: 'relational-db', label: 'Relational DB', icon: Database, color: 'bg-amber-500' },
-      { type: 'nosql-db', label: 'NoSQL DB', icon: DatabaseZap, color: 'bg-amber-500' },
-    ],
-  },
-  {
-    label: 'Background',
-    items: [
-      { type: 'message-queue', label: 'Message Queue', icon: Waypoints, color: 'bg-emerald-500' },
-      { type: 'worker', label: 'Workers', icon: Cog, color: 'bg-emerald-500' },
-      { type: 'object-store', label: 'Object Store', icon: Archive, color: 'bg-emerald-500' },
-      { type: 'batch-processor', label: 'Batch Processor', icon: Cpu, color: 'bg-emerald-500' },
-    ],
-  },
-];
 
 type UrlInit =
   | { kind: 'preset'; system: 'starter' | 'pickgpu' }
@@ -158,7 +124,9 @@ export const SystemCanvasInner = () => {
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null);
   const [pendingPos, setPendingPos] = useState<{ x: number; y: number } | null>(null);
   const hasHydratedFromUrl = useRef(false);
-  const urlSyncSkipsLeft = useRef(2);
+  // Becomes true once nodes are first populated by hydration; URL sync is skipped until then
+  // to avoid overwriting a freshly-decoded ?cfg= URL with pre-hydration state.
+  const urlSyncReady = useRef(false);
   const urlSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectEndPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const measuredLayoutKeyRef = useRef<string | null>(null);
@@ -183,10 +151,11 @@ export const SystemCanvasInner = () => {
     loadStarterSystem();
   }, [loadPickGPUSystem, loadStarterSystem, hydrateFromConfig]);
 
-  // Real-time URL sync: debounce 400ms after any state change (nodes update on every runSimulation)
+  // Real-time URL sync: debounce 400ms after any state change (nodes update on every runSimulation).
+  // Skip until nodes are first populated by hydration so we don't overwrite the incoming URL.
   useEffect(() => {
-    if (urlSyncSkipsLeft.current > 0) {
-      urlSyncSkipsLeft.current -= 1;
+    if (!urlSyncReady.current) {
+      if (nodes.length > 0) urlSyncReady.current = true;
       return;
     }
     if (urlSyncTimer.current) clearTimeout(urlSyncTimer.current);
@@ -287,10 +256,6 @@ export const SystemCanvasInner = () => {
     (connection: Connection) => connection.source !== connection.target,
     []
   );
-
-  const handleAddNode = useCallback((type: NodeType) => {
-    addNode(type);
-  }, [addNode]);
 
   return (
     <>
@@ -467,26 +432,28 @@ export const SystemCanvasInner = () => {
               New System
             </button>
             <div className="relative">
-                <button
-                  onClick={() => setShowNodePicker((v) => !v)}
-                  className="px-3 py-2 text-xs rounded transition-colors font-bold uppercase tracking-tight w-full cursor-pointer flex items-center justify-center gap-1.5 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                >
-                  <Plus size={12} />
-                  Add Node
-                </button>
-                {showNodePicker && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
-                    {NODE_PICKER_SECTIONS.map((section, si) => (
-                      <div key={section.label}>
+              <button
+                onClick={() => setShowNodePicker((v) => !v)}
+                className="px-3 py-2 text-xs rounded transition-colors font-bold uppercase tracking-tight w-full cursor-pointer flex items-center justify-center gap-1.5 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+              >
+                <Plus size={12} />
+                Add Node
+              </button>
+              {showNodePicker && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                  {NODE_OPTION_GROUPS.map((group, si) => {
+                    const items = NODE_OPTIONS.filter((o) => o.group === group.key);
+                    return (
+                      <div key={group.key}>
                         {si > 0 && <div className="h-px bg-gray-100 dark:bg-gray-700" />}
-                        <div className="px-3 pt-2 pb-0.5 text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">{section.label}</div>
-                        {section.items.map((opt) => {
+                        <div className="px-3 pt-2 pb-0.5 text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">{group.label}</div>
+                        {items.map((opt) => {
                           const Icon = opt.icon;
                           const isPresent = (nodeCounts[opt.type as string] ?? 0) > 0;
                           return (
                             <button
                               key={opt.type}
-                              onClick={() => handleAddNode(opt.type)}
+                              onClick={() => addNode(opt.type)}
                               className={cn(
                                 'w-full flex items-center gap-2 px-3 py-1.5 text-left cursor-pointer transition-colors text-[11px] font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700',
                               )}
@@ -500,17 +467,18 @@ export const SystemCanvasInner = () => {
                           );
                         })}
                       </div>
-                    ))}
-                    <div className="h-px bg-gray-100 dark:bg-gray-700" />
-                    <button
-                      onClick={() => setShowNodePicker(false)}
-                      className="w-full px-3 py-2 text-[11px] text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors text-center"
-                    >
-                      Done
-                    </button>
-                  </div>
-                )}
-              </div>
+                    );
+                  })}
+                  <div className="h-px bg-gray-100 dark:bg-gray-700" />
+                  <button
+                    onClick={() => setShowNodePicker(false)}
+                    className="w-full px-3 py-2 text-[11px] text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors text-center"
+                  >
+                    Done
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               onClick={share}
               className={cn(

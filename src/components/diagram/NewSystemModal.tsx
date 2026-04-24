@@ -1,51 +1,9 @@
 import { useState } from 'react';
-import {
-  Archive,
-  Cog,
-  Cpu,
-  Database,
-  DatabaseZap,
-  Gauge,
-  Globe,
-  MonitorSmartphone,
-  Router,
-  ServerCog,
-  Waypoints,
-  X,
-} from 'lucide-react';
+import { X } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { NODE_OPTIONS, NODE_OPTION_GROUPS } from '../../data/nodeOptions';
 
-interface LayerOption {
-  id: string;
-  label: string;
-  description: string;
-  icon: React.ElementType;
-  color: string;
-  group: 'ingress' | 'serving' | 'data' | 'background';
-}
-
-const LAYER_OPTIONS: LayerOption[] = [
-  { id: 'client', label: 'Clients', description: 'User devices / browsers', icon: MonitorSmartphone, color: 'bg-sky-500', group: 'ingress' },
-  { id: 'cdn', label: 'Edge Cache', description: 'CDN / edge caching layer', icon: Globe, color: 'bg-sky-500', group: 'ingress' },
-  { id: 'load-balancer', label: 'Load Balancer', description: 'Request routing / proxy', icon: Router, color: 'bg-sky-500', group: 'ingress' },
-  { id: 'service', label: 'Service', description: 'Stateless API service', icon: ServerCog, color: 'bg-violet-500', group: 'serving' },
-  { id: 'cache', label: 'Cache', description: 'In-memory serving cache', icon: Gauge, color: 'bg-violet-500', group: 'serving' },
-  { id: 'relational-db', label: 'Relational DB', description: 'SQL database', icon: Database, color: 'bg-amber-500', group: 'data' },
-  { id: 'nosql-db', label: 'NoSQL DB', description: 'Wide-column / document store', icon: DatabaseZap, color: 'bg-amber-500', group: 'data' },
-  { id: 'message-queue', label: 'Message Queue', description: 'Async job scheduler', icon: Waypoints, color: 'bg-emerald-500', group: 'background' },
-  { id: 'worker', label: 'Workers', description: 'Async background workers', icon: Cog, color: 'bg-emerald-500', group: 'background' },
-  { id: 'object-store', label: 'Object Store', description: 'Blob / durable storage', icon: Archive, color: 'bg-emerald-500', group: 'background' },
-  { id: 'batch-processor', label: 'Batch Processor', description: 'Offline batch / stream jobs', icon: Cpu, color: 'bg-emerald-500', group: 'background' },
-];
-
-const GROUPS: { key: LayerOption['group']; label: string }[] = [
-  { key: 'ingress', label: 'Ingress' },
-  { key: 'serving', label: 'Serving' },
-  { key: 'data', label: 'Data' },
-  { key: 'background', label: 'Background' },
-];
-
-const DEFAULT_SELECTED = new Set(['client', 'load-balancer', 'service', 'cache', 'relational-db']);
+const DEFAULT_SELECTED = new Set<string>(['client', 'load-balancer', 'service', 'cache', 'relational-db']);
 
 interface NewSystemModalProps {
   onClose: () => void;
@@ -100,8 +58,8 @@ export const NewSystemModal = ({ onClose, onCreate }: NewSystemModalProps) => {
 
         {/* Layer groups */}
         <div className="overflow-y-auto p-4 space-y-4 flex-1">
-          {GROUPS.map(({ key, label }) => {
-            const layers = LAYER_OPTIONS.filter((l) => l.group === key);
+          {NODE_OPTION_GROUPS.map(({ key, label }) => {
+            const layers = NODE_OPTIONS.filter((l) => l.group === key);
             return (
               <div key={key}>
                 <p className="text-[9px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500 mb-2">
@@ -110,12 +68,12 @@ export const NewSystemModal = ({ onClose, onCreate }: NewSystemModalProps) => {
                 <div className="grid grid-cols-2 gap-2">
                   {layers.map((layer) => {
                     const Icon = layer.icon;
-                    const isSelected = selected.has(layer.id);
-                    const isForced = layer.id === 'client';
+                    const isSelected = selected.has(layer.type);
+                    const isForced = layer.type === 'client';
                     return (
                       <button
-                        key={layer.id}
-                        onClick={() => toggle(layer.id)}
+                        key={layer.type}
+                        onClick={() => toggle(layer.type)}
                         disabled={isForced}
                         className={cn(
                           'flex items-center gap-2.5 p-2.5 rounded-lg border text-left transition-all cursor-pointer',

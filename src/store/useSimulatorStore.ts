@@ -68,7 +68,6 @@ const SERVING_DB_TYPES = new Set<NodeType>(['relational-db', 'nosql-db']);
 const inferBypassEdgesForRemovedNode = (
   edges: UserEdge[],
   removedNodeId: string,
-  _hasNoSql: boolean,
 ): UserEdge[] => {
   const incoming = edges.filter((edge) => edge.target === removedNodeId);
   const outgoing = edges.filter((edge) => edge.source === removedNodeId);
@@ -304,6 +303,7 @@ const LAYERS: LayerDef[] = [
 
 const LAYER_BY_ID = new Map(LAYERS.map((layer) => [layer.id, layer]));
 
+// pickGPU uses default LAYERS labels; kept as an empty override map for future customization.
 const PICKGPU_NODE_LABELS: Record<string, string> = {};
 
 const PICKGPU_IMPLEMENTATION_LABELS: Record<string, string> = {
@@ -1060,8 +1060,7 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
               targetHandle: normalizeHandleId(edge.targetHandle),
               kind: edge.data?.kind ?? 'request',
             }));
-      const hasNoSql = (state.nodeCounts['nosql-db'] || 0) > 0;
-      const bypassEdges = inferBypassEdgesForRemovedNode(visibleEdges, layerId, hasNoSql);
+      const bypassEdges = inferBypassEdgesForRemovedNode(visibleEdges, layerId);
       const remainingVisibleEdges = [...visibleEdges, ...bypassEdges]
         .filter((edge) => edge.source !== layerId && edge.target !== layerId)
         .reduce<UserEdge[]>((acc, edge) => {

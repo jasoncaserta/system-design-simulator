@@ -9,6 +9,9 @@ export function useShareUrl(): { share: () => void; copied: boolean } {
       try {
         await navigator.clipboard.writeText(url);
       } catch {
+        // Fallback for non-secure contexts (e.g. http://localhost) where
+        // navigator.clipboard is unavailable. document.execCommand('copy') is
+        // deprecated but remains the only cross-browser option in that case.
         const textarea = document.createElement('textarea');
         textarea.value = url;
         textarea.style.position = 'fixed';

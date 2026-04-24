@@ -1,5 +1,7 @@
 import type { Scenario } from '../store/types';
 
+// Note: successCriteria functions use hardcoded node IDs (e.g. 'service', 'relational-db').
+// All scenarios lock initialState.system to 'starter' or 'pickgpu', which guarantee those IDs exist.
 export const SCENARIOS: Scenario[] = [
   {
     id: 'black-friday',

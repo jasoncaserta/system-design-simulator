@@ -207,9 +207,7 @@ export const NodeConfigPanel = ({ nodeType, tierId }: { nodeType: NodeType; tier
     setConsistencyModel,
   } = useSimulatorStore();
 
-  const cleanNodeId = tierId.replace(/-[0-9]+$/, '');
-
-  const cleanId = cleanNodeId;
+  const cleanId = tierId.replace(/-[0-9]+$/, '');
   const count = nodeCounts[cleanId] ?? 0;
   const base = getBaseCapacity(cleanId);
   const currentCapacity = nodeCapacities[cleanId] || base;
