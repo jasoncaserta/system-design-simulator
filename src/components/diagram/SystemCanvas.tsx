@@ -9,8 +9,9 @@ import ReactFlow, {
 } from 'reactflow';
 import {
   Archive, ChevronDown, ChevronUp, Cog, Cpu, Database, DatabaseZap,
-  Gauge, Globe, MonitorSmartphone, Plus, Redo2, Router, ServerCog, Settings, Share2, Undo2, Waypoints, X,
+  Gauge, Globe, MonitorSmartphone, Plus, Redo2, Router, ServerCog, Settings, Share2, Undo2, Waypoints, X, Target,
 } from 'lucide-react';
+import { SCENARIOS } from '../../data/scenarios';
 import 'reactflow/dist/style.css';
 import { useSimulatorStore } from '../../store/useSimulatorStore';
 import { CustomNode } from './CustomNodes';
@@ -111,6 +112,8 @@ export const SystemCanvasInner = () => {
     rpsPerUser,
     showNodeConfig,
     toggleNodeConfig,
+    loadScenario,
+    activeScenario,
   } = store;
 
   const buildUrlConfig = useCallback((): SharedConfig => {
@@ -141,6 +144,8 @@ export const SystemCanvasInner = () => {
       deletedEdgeIds: s.deletedEdgeIds,
       userAddedEdges: s.userAddedEdges,
       customNodePositions: s.customNodePositions,
+      nodeHealth: s.nodeHealth,
+      consistencyModels: s.consistencyModels,
     };
   }, []);
 
@@ -149,6 +154,7 @@ export const SystemCanvasInner = () => {
   const [isLegendMinimized, setIsLegendMinimized] = useState(true);
   const [showNewSystemModal, setShowNewSystemModal] = useState(false);
   const [showNodePicker, setShowNodePicker] = useState(false);
+  const [showScenarioPicker, setShowScenarioPicker] = useState(false);
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null);
   const [pendingPos, setPendingPos] = useState<{ x: number; y: number } | null>(null);
   const hasHydratedFromUrl = useRef(false);
@@ -380,23 +386,72 @@ export const SystemCanvasInner = () => {
           </div>
         </Panel>
         <Panel position="top-right" className="bg-white dark:bg-gray-800 p-2 rounded shadow-md border border-gray-200 dark:border-gray-700 pointer-events-auto flex flex-col space-y-2 w-52">
+          {/* Scenarios picker */}
+          <div className="relative">
+            <button
+              onClick={() => setShowScenarioPicker((v) => !v)}
+              className={cn(
+                "px-3 py-2 text-xs rounded transition-colors font-bold uppercase tracking-tight w-full cursor-pointer flex items-center justify-center gap-1.5",
+                activeScenario
+                  ? "bg-blue-600 text-white hover:bg-blue-700"
+                  : "border border-amber-400 dark:border-amber-600 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+              )}
+            >
+              <Target size={12} />
+              {activeScenario ? activeScenario.name : 'Challenges'}
+            </button>
+            {showScenarioPicker && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                <div className="px-3 pt-2 pb-1 text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+                  Choose a Scenario
+                </div>
+                {SCENARIOS.map((scenario) => (
+                  <button
+                    key={scenario.id}
+                    onClick={() => { loadScenario(scenario); setShowScenarioPicker(false); }}
+                    className={cn(
+                      'w-full flex flex-col px-3 py-2 text-left cursor-pointer transition-colors border-t border-gray-100 dark:border-gray-700',
+                      activeScenario?.id === scenario.id
+                        ? 'bg-blue-50 dark:bg-blue-900/20'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                    )}
+                  >
+                    <span className="text-[11px] font-bold text-gray-800 dark:text-gray-100">
+                      {activeScenario?.id === scenario.id ? '✓ ' : ''}{scenario.name}
+                    </span>
+                    <span className="text-[9px] text-gray-400 dark:text-gray-500 leading-snug mt-0.5 line-clamp-2">
+                      {scenario.goal}
+                    </span>
+                  </button>
+                ))}
+                <div className="h-px bg-gray-100 dark:bg-gray-700" />
+                <button
+                  onClick={() => setShowScenarioPicker(false)}
+                  className="w-full px-3 py-2 text-[11px] text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors text-center"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="border-t border-gray-200 dark:border-gray-700" />
           <button
             onClick={handleReset}
             className={cn(
               "px-3 py-2 text-white text-xs rounded transition-colors font-bold uppercase tracking-tight w-full cursor-pointer",
-              currentSystem === 'starter' ? "bg-blue-600 hover:bg-blue-700 shadow-inner" : "bg-gray-400 hover:bg-gray-500 opacity-80"
+              currentSystem === 'starter' && !activeScenario ? "bg-blue-600 hover:bg-blue-700 shadow-inner" : "bg-gray-400 hover:bg-gray-500 opacity-80"
             )}
           >
-            {currentSystem === 'starter' ? '✓ Starter System' : 'Starter System'}
+            {currentSystem === 'starter' && !activeScenario ? '✓ Starter System' : 'Starter System'}
           </button>
           <button
             onClick={handlePickGPU}
             className={cn(
               "px-3 py-2 text-white text-xs rounded transition-colors font-bold uppercase tracking-tight w-full cursor-pointer",
-              currentSystem === 'pickgpu' ? "bg-blue-600 hover:bg-blue-700 shadow-inner" : "bg-gray-400 hover:bg-gray-500 opacity-80"
+              currentSystem === 'pickgpu' && !activeScenario ? "bg-blue-600 hover:bg-blue-700 shadow-inner" : "bg-gray-400 hover:bg-gray-500 opacity-80"
             )}
           >
-            {currentSystem === 'pickgpu' ? '✓ pickGPU System' : 'pickGPU System'}
+            {currentSystem === 'pickgpu' && !activeScenario ? '✓ pickGPU System' : 'pickGPU System'}
           </button>
           <div className="border-t border-gray-200 dark:border-gray-700 pt-2 flex flex-col space-y-2">
             <button

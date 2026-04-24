@@ -27,6 +27,9 @@ import type {
   BackfillMode,
   RecoveryMode,
   ReplicationMode,
+  HealthState,
+  ConsistencyModel,
+  Scenario,
 } from './types';
 import { layoutGraphNodes } from '../utils/autoLayout';
 
@@ -65,7 +68,7 @@ const SERVING_DB_TYPES = new Set<NodeType>(['relational-db', 'nosql-db']);
 const inferBypassEdgesForRemovedNode = (
   edges: UserEdge[],
   removedNodeId: string,
-  hasNoSql: boolean,
+  _hasNoSql: boolean,
 ): UserEdge[] => {
   const incoming = edges.filter((edge) => edge.target === removedNodeId);
   const outgoing = edges.filter((edge) => edge.source === removedNodeId);
@@ -116,7 +119,7 @@ const getDefaultRoute = (
     }
     return { sourceHandle: 'source-right', targetHandle: 'target-left' };
   }
-  if ((source === 'message-queue' && target === 'worker') || (source === 'worker' && target === 'object-store') || (source === 'message-queue' && target === 'batch-processor') || (source === 'worker' && target === 'batch-processor') || (source === 'object-store' && target === 'batch-processor')) {
+  if ((source === 'message-queue' && target === 'worker') || (source === 'worker' && target === 'object-store') || (source === 'worker' && target === 'batch-processor') || (source === 'object-store' && target === 'batch-processor')) {
     return { sourceHandle: 'source-right', targetHandle: 'target-left' };
   }
   if (source === 'batch-processor' && SERVING_DB_TYPES.has(target as NodeType)) {
@@ -286,28 +289,22 @@ const INITIAL_CAPACITIES = {
 };
 
 const LAYERS: LayerDef[] = [
-  { id: 'client', type: 'client', label: 'CLIENTS', implementationLabel: 'Browsers', x: 0, y: 0 },
-  { id: 'cdn', type: 'cdn', label: 'EDGE CACHE', implementationLabel: 'CDN', x: 1, y: 0 },
-  { id: 'load-balancer', type: 'load-balancer', label: 'REQUEST ROUTER', implementationLabel: 'Nginx / Envoy', x: 2, y: 0 },
+  { id: 'client', type: 'client', label: 'CLIENT', implementationLabel: 'Browsers', x: 0, y: 0 },
+  { id: 'cdn', type: 'cdn', label: 'CDN', implementationLabel: 'CDN', x: 1, y: 0 },
+  { id: 'load-balancer', type: 'load-balancer', label: 'LOAD BALANCER', implementationLabel: 'Nginx / Envoy', x: 2, y: 0 },
   { id: 'message-queue', type: 'message-queue', label: 'MESSAGE QUEUE', implementationLabel: 'Kafka / RabbitMQ', x: 2, y: 0.9 },
-  { id: 'service', type: 'service', label: 'STATELESS SERVICE', implementationLabel: 'API Service', x: 3, y: 0 },
-  { id: 'worker', type: 'worker', label: 'WORKERS', implementationLabel: 'Async Workers', x: 3, y: 1.24 },
-  { id: 'cache', type: 'cache', label: 'SERVING CACHE', implementationLabel: 'Redis / Memcached', x: 4, y: 0.385 },
-  { id: 'object-store', type: 'object-store', label: 'DURABLE STORE', implementationLabel: 'S3 / GCS', x: 4, y: 1.24 },
-  { id: 'relational-db', type: 'relational-db', label: 'DATABASE', implementationLabel: 'PostgreSQL / MySQL', x: 5, y: 0 },
-  { id: 'nosql-db', type: 'nosql-db', label: 'NOSQL DB', implementationLabel: 'Cassandra / MongoDB', x: 6, y: 0.08 },
+  { id: 'service', type: 'service', label: 'API SERVER', implementationLabel: 'API Service', x: 3, y: 0 },
+  { id: 'worker', type: 'worker', label: 'WORKER', implementationLabel: 'Async Workers', x: 3, y: 1.24 },
+  { id: 'cache', type: 'cache', label: 'CACHE', implementationLabel: 'Redis / Memcached', x: 4, y: 0.385 },
+  { id: 'object-store', type: 'object-store', label: 'OBJECT STORE', implementationLabel: 'S3 / GCS', x: 4, y: 1.24 },
+  { id: 'relational-db', type: 'relational-db', label: 'RELATIONAL DATABASE', implementationLabel: 'PostgreSQL / MySQL', x: 5, y: 0 },
+  { id: 'nosql-db', type: 'nosql-db', label: 'NOSQL DATABASE', implementationLabel: 'Cassandra / MongoDB', x: 6, y: 0.08 },
   { id: 'batch-processor', type: 'batch-processor', label: 'BATCH PROCESSOR', implementationLabel: 'Spark / Flink / Batch Jobs', x: 7, y: 0.95 },
 ];
 
 const LAYER_BY_ID = new Map(LAYERS.map((layer) => [layer.id, layer]));
 
-const PICKGPU_NODE_LABELS: Record<string, string> = {
-  'load-balancer': 'REQUEST ROUTER',
-  'message-queue': 'JOB SCHEDULER',
-  cache: 'SERVING CACHE',
-  'object-store': 'DURABLE STORE',
-  'relational-db': 'SERVING DATABASE',
-};
+const PICKGPU_NODE_LABELS: Record<string, string> = {};
 
 const PICKGPU_IMPLEMENTATION_LABELS: Record<string, string> = {
   cdn: 'Cloudflare',
@@ -393,7 +390,6 @@ function buildDefaultEdges(enabledIds: string[]): UserEdge[] {
   // Background pipeline
   edge('service', 'message-queue', 'data');
   edge('message-queue', 'worker', 'data');
-  edge('message-queue', 'batch-processor', 'data');
   edge('worker', 'object-store', 'data');
   edge('object-store', 'batch-processor', 'data');
   edge('batch-processor', 'nosql-db', 'data');
@@ -425,7 +421,6 @@ function buildPresetTopologyEdges(enabledIds: string[]): TopologyEdge[] {
   edge('service', 'relational-db', 'data');
   edge('message-queue', 'worker', 'data');
   edge('worker', 'object-store', 'data');
-  edge('message-queue', 'batch-processor', 'data');
   edge('object-store', 'batch-processor', 'data');
   edge('batch-processor', has('nosql-db') ? 'nosql-db' : 'relational-db', 'data');
 
@@ -667,6 +662,8 @@ const captureSnapshot = (s: SimulationStore): SimulationSnapshot => ({
   enabledLayers: [...s.enabledLayers], deletedEdgeIds: [...s.deletedEdgeIds],
   userAddedEdges: [...s.userAddedEdges], customNodePositions: { ...s.customNodePositions },
   currentSystem: s.currentSystem,
+  nodeHealth: { ...s.nodeHealth },
+  consistencyModels: { ...s.consistencyModels },
 });
 
 export const useSimulatorStore = create<SimulationStore>((set, get) => {
@@ -697,6 +694,9 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
   customNodePositions: {},
   past: [],
   future: [],
+  nodeHealth: {},
+  consistencyModels: {},
+  activeScenario: null,
 
   updateNodeLabel: (nodeId, label) => {
     pushHistory();
@@ -974,6 +974,9 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
       deletedEdgeIds: [],
       userAddedEdges: [],
       customNodePositions: {},
+      nodeHealth: {},
+      consistencyModels: {},
+      activeScenario: null,
     });
     get().runSimulation();
   },
@@ -992,6 +995,9 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
       deletedEdgeIds: [],
       userAddedEdges: [],
       customNodePositions: {},
+      nodeHealth: {},
+      consistencyModels: {},
+      activeScenario: null,
     });
     get().runSimulation();
   },
@@ -1090,6 +1096,9 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
       savedNodeCounts: {},
       currentSystem: cfg.currentSystem ?? 'custom',
       expandedNodeId: null,
+      nodeHealth: { ...(cfg.nodeHealth ?? {}) },
+      consistencyModels: { ...(cfg.consistencyModels ?? {}) },
+      activeScenario: null,
     });
     get().runSimulation();
   },
@@ -1120,6 +1129,68 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
       expandedNodeId: null,
     });
     get().runSimulation();
+  },
+
+  setNodeHealth: (nodeId, health) => {
+    pushHistory();
+    set((state) => ({
+      nodeHealth: { ...state.nodeHealth, [nodeId]: health },
+    }));
+    get().runSimulation();
+  },
+
+  setConsistencyModel: (nodeId, model) => {
+    pushHistory();
+    set((state) => ({
+      consistencyModels: { ...state.consistencyModels, [nodeId]: model },
+    }));
+    get().runSimulation();
+  },
+
+  loadScenario: (scenario: Scenario) => {
+    pushHistory();
+    const base = scenario.initialState.system === 'pickgpu'
+      ? {
+          ...buildPickGPUDefaults(),
+          currentSystem: 'pickgpu' as const,
+          expandedNodeId: null as string | null,
+          nodeLabels: { ...PICKGPU_NODE_LABELS },
+          implementationLabels: { ...PICKGPU_IMPLEMENTATION_LABELS },
+          enabledLayers: [...PICKGPU_ENABLED_LAYERS],
+          savedNodeCounts: {} as Record<string, number>,
+          deletedEdgeIds: [] as string[],
+          userAddedEdges: [] as UserEdge[],
+          customNodePositions: {} as Record<string, { x: number; y: number }>,
+        }
+      : {
+          nodeCounts: { client: 1, 'load-balancer': 1, service: 1, cache: 1, 'relational-db': 1, 'nosql-db': 0, cdn: 0, 'message-queue': 0, worker: 0, 'object-store': 0, 'batch-processor': 0 },
+          nodeCapacities: { ...INITIAL_CAPACITIES },
+          ...INITIAL_PARAMS,
+          currentSystem: 'starter' as const,
+          expandedNodeId: null as string | null,
+          nodeLabels: {} as Record<string, string>,
+          implementationLabels: {} as Record<string, string>,
+          enabledLayers: [...STARTER_ENABLED_LAYERS],
+          savedNodeCounts: {} as Record<string, number>,
+          deletedEdgeIds: [] as string[],
+          userAddedEdges: [] as UserEdge[],
+          customNodePositions: {} as Record<string, { x: number; y: number }>,
+        };
+
+    set({
+      ...base,
+      ...(scenario.initialState.params ?? {}),
+      nodeCounts: { ...base.nodeCounts, ...(scenario.initialState.nodeCounts ?? {}) },
+      nodeCapacities: { ...base.nodeCapacities, ...(scenario.initialState.nodeCapacities ?? {}) },
+      nodeHealth: scenario.initialState.nodeHealth ?? {},
+      consistencyModels: {},
+      activeScenario: scenario,
+    });
+    get().runSimulation();
+  },
+
+  exitScenario: () => {
+    set({ activeScenario: null });
   },
 
   runSimulation: () => {
@@ -1160,6 +1231,8 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
       userAddedEdges,
       deletedEdgeIds,
       nodes: existingNodes,
+      nodeHealth,
+      consistencyModels,
     } = get();
 
     const totalQps = users * rpsPerUser;
@@ -1181,6 +1254,10 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
         ? customNodePositions[layer.id]
         : autoLayoutPositions[layer.id] ?? { x: 0, y: 0 };
 
+      const health = (nodeHealth[layer.id] as HealthState) || 'healthy';
+      // Degraded nodes operate at 40% capacity; unavailable handled as orphaned load later
+      const healthCapacityMult = health === 'degraded' ? 0.4 : 1;
+
       newNodes.push({
         id: layer.id,
         type: 'custom',
@@ -1191,15 +1268,16 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
           implementationLabel: implementationLabels[layer.id] ?? layer.implementationLabel,
           instances: count,
           maxCapacityPerInstance:
-            layer.id === 'relational-db'
+            (layer.id === 'relational-db'
               ? nodeCapacities[layer.id] * databaseShardCount
               : layer.id === 'nosql-db'
                 ? nodeCapacities[layer.id] * nosqlPartitionCount
               : layer.id === 'object-store'
                 ? nodeCapacities[layer.id] * clamp(0.65 + objectStoreThroughput * 1.35, 0.65, 2)
-                : nodeCapacities[layer.id],
+                : nodeCapacities[layer.id]) * healthCapacityMult,
           currentLoad: 0,
           status: 'healthy',
+          healthState: health,
         },
       });
     });
@@ -1326,9 +1404,15 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
     const nosqlServiceEdges = directServiceDbEdges.filter((edge) => edge.target === 'nosql-db');
     const relationalCacheEdges = cacheDbEdges.filter((edge) => edge.target === 'relational-db');
     const nosqlCacheEdges = cacheDbEdges.filter((edge) => edge.target === 'nosql-db');
+    // Health-aware cache state: cache present in topology vs. cache able to actually forward
+    const cacheIsUnavailable = activeIds.has('cache') && (nodeHealth['cache'] as HealthState || 'healthy') === 'unavailable';
     const hasServingCache = serviceCacheEdges.length > 0;
+    // When cache is unavailable, reads block at the cache and do NOT fall through to DB.
+    // The orphaned load step will add the blocked read pressure back onto the service.
+    const cacheCanForward = hasServingCache && !cacheIsUnavailable;
+
     const directDbServingReads = hasServingCache ? 0 : effectiveReadTraffic * serviceFanoutFactor;
-    const cacheMissTraffic = hasServingCache ? effectiveCacheLookups * (1 - effectiveCacheHitRate) : 0;
+    const cacheMissTraffic = cacheCanForward ? effectiveCacheLookups * (1 - effectiveCacheHitRate) : 0;
     const relationalDirectReadLoad = directDbServingReads * relationalReadShare;
     const nosqlDirectReadLoad = hasNoSql ? directDbServingReads - relationalDirectReadLoad : 0;
     const relationalCacheReadLoad = cacheMissTraffic * relationalReadShare;
@@ -1359,14 +1443,12 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
 
     const queueWorkerEdges = (outgoingData.get('message-queue') ?? []).filter((edge) => nodeMap.get(edge.target)?.data.type === 'worker');
     const workerStoreEdges = (outgoingData.get('worker') ?? []).filter((edge) => nodeMap.get(edge.target)?.data.type === 'object-store');
-    const queueBatchEdges = (outgoingData.get('message-queue') ?? []).filter((edge) => nodeMap.get(edge.target)?.data.type === 'batch-processor');
     const workerBatchEdges = (outgoingData.get('worker') ?? []).filter((edge) => nodeMap.get(edge.target)?.data.type === 'batch-processor');
     const storeBatchEdges = (outgoingData.get('object-store') ?? []).filter((edge) => nodeMap.get(edge.target)?.data.type === 'batch-processor');
     const batchDbEdges = (outgoingData.get('batch-processor') ?? []).filter((edge) => SERVING_DB_TYPES.has(nodeMap.get(edge.target)?.data.type ?? 'client'));
 
     distributeByEdges(queueWorkerEdges, sourceFreshnessPressure);
     distributeByEdges(workerStoreEdges, sourceFreshnessPressure);
-    distributeByEdges(queueBatchEdges, processorLoad);
     distributeByEdges(workerBatchEdges, processorLoad);
     distributeByEdges(storeBatchEdges, processorLoad);
     distributeByEdges(
@@ -1389,6 +1471,7 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
     if (hasServingCache) {
       distribute(nodeMap, 'cache', effectiveCacheLookups + effectiveWriteTraffic * cacheInvalidationRate * 0.9);
     }
+    // Use health-aware read loads: when cache is unavailable reads don't reach the DB
     distribute(nodeMap, 'relational-db', relationalCacheReadLoad + relationalDirectReadLoad + relationalWriteLoad + actualBackgroundDbTraffic * relationalBackgroundWriteShare);
     distribute(nodeMap, 'nosql-db', nosqlCacheReadLoad + nosqlDirectReadLoad + actualBackgroundDbTraffic * nosqlBackgroundWriteShare);
     distribute(nodeMap, 'message-queue', schedulerCoordinationLoad);
@@ -1396,12 +1479,52 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
     distribute(nodeMap, 'object-store', durableStoreLoad);
     distribute(nodeMap, 'batch-processor', processorLoad);
 
+    // ── Consistency model: strong consistency on relational-db reduces write capacity ──
+    const relDbConsistency = (consistencyModels['relational-db'] as ConsistencyModel) || 'eventual';
+    const replicationLagMs = relationalReplicationMode === 'leader_follower'
+      ? Math.round(databaseWriteLoad * 200)
+      : 0;
+    const stalenessRisk =
+      relationalReplicationMode === 'leader_follower' &&
+      replicationLagMs > 50 &&
+      relDbConsistency !== 'strong';
+
+    if (relDbConsistency === 'strong' && relationalReplicationMode === 'leader_follower') {
+      const dbNode = nodeMap.get('relational-db');
+      if (dbNode) {
+        dbNode.data.maxCapacityPerInstance *= 0.8; // sync writes are slower
+      }
+    }
+
+    // ── Orphaned load: unavailable nodes block upstream services ──
+    newNodes.forEach((node) => {
+      const health = node.data.healthState || 'healthy';
+      if (health === 'unavailable' && node.data.currentLoad > 0) {
+        const orphaned = node.data.currentLoad;
+        node.data.currentLoad = 0; // node processes nothing
+        // Zero all outbound edges from this node — nothing leaves an unavailable node
+        visibleEdges.forEach((edge) => {
+          if (edge.source === node.id) edgeLoad.set(edge.id, 0);
+        });
+        // DB / cache down → service threads block waiting for responses (timeout amplification)
+        if (SERVING_DB_TYPES.has(node.data.type) || node.data.type === 'cache') {
+          const serviceNode = nodeMap.get('service');
+          if (serviceNode) {
+            serviceNode.data.currentLoad += orphaned * 1.5;
+          }
+        }
+      }
+    });
+
+    // ── Status computation ──
     newNodes.forEach((node) => {
       const totalCapacity = node.data.instances * node.data.maxCapacityPerInstance;
       const loadRatio = totalCapacity > 0 ? node.data.currentLoad / totalCapacity : 0;
       const isBackgroundStage = BACKGROUND_TIERS.has(node.id);
 
-      if (isBackgroundStage && backgroundStatus === 'overloaded') {
+      if (node.data.healthState === 'unavailable') {
+        node.data.status = 'overloaded';
+      } else if (isBackgroundStage && backgroundStatus === 'overloaded') {
         node.data.status = 'overloaded';
       } else if (isBackgroundStage && backgroundStatus === 'stressed') {
         node.data.status = loadRatio > 1 ? 'overloaded' : 'stressed';
@@ -1415,6 +1538,47 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
         node.data.status = 'healthy';
       }
     });
+
+    // ── Annotate DB nodes with replication/consistency data ──
+    const relDbNode = nodeMap.get('relational-db');
+    if (relDbNode) {
+      relDbNode.data.replicationLagMs = replicationLagMs;
+      relDbNode.data.stalenessRisk = stalenessRisk;
+      relDbNode.data.consistencyModel = relDbConsistency;
+    }
+
+    // ── Latency path estimation (P50 / P99) ──
+    // Walk the critical serving path: CDN → LB → service → cache → DB
+    let p50 = 0;
+    if (activeIds.has('cdn')) {
+      p50 += 8 + (1 - cdnHitRate) * 90; // 8ms hit, ~98ms miss (origin fetch)
+    }
+    if (activeIds.has('load-balancer')) p50 += 1;
+    if (activeIds.has('service')) {
+      p50 += 8 * Math.max(1, 1 + (serviceFanout - 1) * 0.5); // each fanout adds latency
+    }
+    if (activeIds.has('cache')) {
+      // effectiveCacheHitRate already computed above
+      const hitMs = 1;
+      const missMs = 1 + 4 + (activeIds.has('relational-db') ? 5 : activeIds.has('nosql-db') ? 3 : 5);
+      p50 += effectiveCacheHitRate * hitMs + (1 - effectiveCacheHitRate) * missMs;
+    } else if (activeIds.has('relational-db')) {
+      p50 += 5;
+    } else if (activeIds.has('nosql-db')) {
+      p50 += 3;
+    }
+    // Strong consistency adds half the replication lag to writes (sync overhead)
+    if (relDbConsistency === 'strong' && relationalReplicationMode === 'leader_follower') {
+      p50 += replicationLagMs * 0.5;
+    }
+    const p50Ms = Math.round(p50);
+    const p99Ms = Math.round(p50 * 3);
+
+    const clientNode = nodeMap.get('client');
+    if (clientNode) {
+      clientNode.data.latencyP50Ms = p50Ms;
+      clientNode.data.latencyP99Ms = p99Ms;
+    }
 
     const newEdges: Edge<EdgeData>[] = visibleEdges.map((edge) => ({
       id: edge.id,

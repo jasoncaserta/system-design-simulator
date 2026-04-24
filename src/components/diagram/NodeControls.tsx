@@ -9,6 +9,7 @@ import {
   recoveryOptions,
   processingModeOptions,
   replicationModeOptions,
+  consistencyModelOptions,
   sizes,
   stepThroughOptions,
   getBaseCapacity,
@@ -202,9 +203,13 @@ export const NodeConfigPanel = ({ nodeType, tierId }: { nodeType: NodeType; tier
     nodeCapacities,
     updateNodeInstances,
     updateNodeCapacity,
+    consistencyModels,
+    setConsistencyModel,
   } = useSimulatorStore();
 
-  const cleanId = tierId.replace(/-[0-9]+$/, '');
+  const cleanNodeId = tierId.replace(/-[0-9]+$/, '');
+
+  const cleanId = cleanNodeId;
   const count = nodeCounts[cleanId] ?? 0;
   const base = getBaseCapacity(cleanId);
   const currentCapacity = nodeCapacities[cleanId] || base;
@@ -381,36 +386,51 @@ export const NodeConfigPanel = ({ nodeType, tierId }: { nodeType: NodeType; tier
       )}
 
       {nodeType === 'relational-db' && (
-        <ControlSection title="Config">
-          <Stepper
-            label="Replication"
-            value={replicationModeOptions.find((o) => o.value === relationalReplicationMode)!.label}
-            onDecrement={() => updateSimParams({ relationalReplicationMode: stepThroughOptions(replicationModeOptions, relationalReplicationMode, -1) })}
-            onIncrement={() => updateSimParams({ relationalReplicationMode: stepThroughOptions(replicationModeOptions, relationalReplicationMode, 1) })}
-            disableMin={relationalReplicationMode === 'single_leader'}
-            disableMax={relationalReplicationMode === 'leader_follower'}
-          />
-          <Stepper
-            label="Shards"
-            value={String(databaseShardCount)}
-            onDecrement={() => updateSimParams({ databaseShardCount: Math.max(1, databaseShardCount - 1) })}
-            onIncrement={() => updateSimParams({ databaseShardCount: Math.min(8, databaseShardCount + 1) })}
-            disableMin={databaseShardCount <= 1}
-            disableMax={databaseShardCount >= 8}
-          />
-          <Slider
-            label="Write Load"
-            value={databaseWriteLoad}
-            onChange={(v) => updateSimParams({ databaseWriteLoad: v })}
-          />
-          {(nodeCounts['message-queue'] > 0 || nodeCounts.worker > 0 || nodeCounts['batch-processor'] > 0) && (
-            <Toggle
-              label="Read Priority"
-              value={enableApiPriorityGate}
-              onChange={(v) => updateSimParams({ enableApiPriorityGate: v })}
+        <>
+          <ControlSection title="Config">
+            <Stepper
+              label="Replication"
+              value={replicationModeOptions.find((o) => o.value === relationalReplicationMode)!.label}
+              onDecrement={() => updateSimParams({ relationalReplicationMode: stepThroughOptions(replicationModeOptions, relationalReplicationMode, -1) })}
+              onIncrement={() => updateSimParams({ relationalReplicationMode: stepThroughOptions(replicationModeOptions, relationalReplicationMode, 1) })}
+              disableMin={relationalReplicationMode === 'single_leader'}
+              disableMax={relationalReplicationMode === 'leader_follower'}
             />
-          )}
-        </ControlSection>
+            <Stepper
+              label="Shards"
+              value={String(databaseShardCount)}
+              onDecrement={() => updateSimParams({ databaseShardCount: Math.max(1, databaseShardCount - 1) })}
+              onIncrement={() => updateSimParams({ databaseShardCount: Math.min(8, databaseShardCount + 1) })}
+              disableMin={databaseShardCount <= 1}
+              disableMax={databaseShardCount >= 8}
+            />
+            <Slider
+              label="Write Load"
+              value={databaseWriteLoad}
+              onChange={(v) => updateSimParams({ databaseWriteLoad: v })}
+            />
+            {(nodeCounts['message-queue'] > 0 || nodeCounts.worker > 0 || nodeCounts['batch-processor'] > 0) && (
+              <Toggle
+                label="Read Priority"
+                value={enableApiPriorityGate}
+                onChange={(v) => updateSimParams({ enableApiPriorityGate: v })}
+              />
+            )}
+          </ControlSection>
+          <ControlSection title="Consistency">
+            <Stepper
+              label="Model"
+              value={consistencyModelOptions.find((o) => o.value === (consistencyModels['relational-db'] || 'eventual'))!.label}
+              onDecrement={() => setConsistencyModel('relational-db', stepThroughOptions(consistencyModelOptions, (consistencyModels['relational-db'] || 'eventual') as typeof consistencyModelOptions[number]['value'], -1))}
+              onIncrement={() => setConsistencyModel('relational-db', stepThroughOptions(consistencyModelOptions, (consistencyModels['relational-db'] || 'eventual') as typeof consistencyModelOptions[number]['value'], 1))}
+              disableMin={(consistencyModels['relational-db'] || 'eventual') === 'eventual'}
+              disableMax={(consistencyModels['relational-db'] || 'eventual') === 'strong'}
+            />
+            <p className="text-[9px] text-slate-400 dark:text-slate-500 italic leading-tight">
+              {consistencyModelOptions.find((o) => o.value === (consistencyModels['relational-db'] || 'eventual'))!.description}
+            </p>
+          </ControlSection>
+        </>
       )}
 
       {nodeType === 'nosql-db' && (

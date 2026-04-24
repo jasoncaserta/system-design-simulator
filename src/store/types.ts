@@ -19,6 +19,8 @@ export type BackfillMode = 'off' | 'catch_up' | 'steady' | 'aggressive';
 export type RecoveryMode = 'off' | 'startup' | 'rebuild';
 export type ProcessingMode = 'batch' | 'stream';
 export type ReplicationMode = 'single_leader' | 'leader_follower';
+export type HealthState = 'healthy' | 'degraded' | 'unavailable';
+export type ConsistencyModel = 'strong' | 'read-your-writes' | 'bounded-staleness' | 'eventual';
 
 export interface NodeData {
   type: NodeType;
@@ -28,6 +30,31 @@ export interface NodeData {
   maxCapacityPerInstance: number; // work units/sec per instance
   currentLoad: number;            // total work units/sec hitting this node
   status: NodeStatus;
+  // Failure injection
+  healthState?: HealthState;
+  // Latency (populated on client node after simulation)
+  latencyP50Ms?: number;
+  latencyP99Ms?: number;
+  // Replication (populated on DB nodes)
+  replicationLagMs?: number;
+  stalenessRisk?: boolean;
+  consistencyModel?: ConsistencyModel;
+}
+
+export interface Scenario {
+  id: string;
+  name: string;
+  description: string;
+  goal: string;
+  hint?: string;
+  successCriteria: (nodes: Node<NodeData>[]) => boolean;
+  initialState: {
+    system: 'starter' | 'pickgpu';
+    params?: Partial<SimulationParams>;
+    nodeHealth?: Record<string, HealthState>;
+    nodeCounts?: Record<string, number>;
+    nodeCapacities?: Record<string, number>;
+  };
 }
 
 export interface EdgeData {
@@ -86,6 +113,8 @@ export interface SharedConfig {
   deletedEdgeIds: string[];
   userAddedEdges: UserEdge[];
   customNodePositions: Record<string, { x: number; y: number }>;
+  nodeHealth?: Record<string, HealthState>;
+  consistencyModels?: Record<string, ConsistencyModel>;
 }
 
 // Snapshot of source-of-truth state (excludes derived nodes/edges and UI state)
@@ -99,6 +128,8 @@ export type SimulationSnapshot = SimulationParams & {
   userAddedEdges: UserEdge[];
   customNodePositions: Record<string, { x: number; y: number }>;
   currentSystem: 'starter' | 'pickgpu' | 'custom';
+  nodeHealth: Record<string, HealthState>;
+  consistencyModels: Record<string, ConsistencyModel>;
 };
 
 export interface SimulationStore extends SimulationParams {
@@ -118,6 +149,9 @@ export interface SimulationStore extends SimulationParams {
   customNodePositions: Record<string, { x: number; y: number }>;
   past: SimulationSnapshot[];
   future: SimulationSnapshot[];
+  nodeHealth: Record<string, HealthState>;
+  consistencyModels: Record<string, ConsistencyModel>;
+  activeScenario: Scenario | null;
 
   // Actions
   updateSimParams: (params: Partial<SimulationParams>) => void;
@@ -141,4 +175,8 @@ export interface SimulationStore extends SimulationParams {
   hydrateFromConfig: (cfg: SharedConfig) => void;
   undo: () => void;
   redo: () => void;
+  setNodeHealth: (nodeId: string, health: HealthState) => void;
+  setConsistencyModel: (nodeId: string, model: ConsistencyModel) => void;
+  loadScenario: (scenario: Scenario) => void;
+  exitScenario: () => void;
 }
