@@ -283,6 +283,11 @@ export const SystemCanvasInner = () => {
     setPendingPos(null);
   }, []);
 
+  const isValidConnection = useCallback(
+    (connection: Connection) => connection.source !== connection.target,
+    []
+  );
+
   const handleAddNode = useCallback((type: NodeType) => {
     addNode(type);
   }, [addNode]);
@@ -336,6 +341,7 @@ export const SystemCanvasInner = () => {
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}
         onConnectEnd={handleConnectEnd}
+        isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         connectionRadius={CONNECTION_RADIUS}

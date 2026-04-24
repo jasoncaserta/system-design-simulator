@@ -818,6 +818,7 @@ export const useSimulatorStore = create<SimulationStore>((set, get) => {
   },
 
   addUserEdge: (connection: Connection, kind: 'request' | 'data') => {
+    if (connection.source === connection.target) return;
     pushHistory();
     const id = `user-${connection.source}-${connection.target}-${kind}`;
     const userEdge: UserEdge = {

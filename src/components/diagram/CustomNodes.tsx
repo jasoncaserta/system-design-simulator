@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position, useStore } from 'reactflow';
 import type { NodeProps } from 'reactflow';
 import type { NodeData, HealthState } from '../../store/types';
 import { useSimulatorStore } from '../../store/useSimulatorStore';
@@ -81,7 +81,15 @@ const CustomNodeInner = ({ id, data }: NodeProps<NodeData>) => {
     ? 'border-gray-400 bg-gray-100 dark:bg-gray-900/40'
     : StatusColors[data.status];
   const typeColor = TypeColors[data.type] || 'bg-blue-500';
-  const handleClassName = "!w-4 !h-4 !bg-blue-500 !opacity-0 group-hover:!opacity-50 hover:!opacity-100 !rounded-full !border-2 !border-white dark:!border-gray-900 !transition-opacity !duration-150";
+  const isConnecting = useStore(s => !!s.connectionNodeId);
+  const handleBase = "!w-4 !h-4 !rounded-full !border-2 !border-white dark:!border-gray-900 !transition-all !duration-150";
+  const handleVisibility = isConnecting
+    ? "!opacity-80 !bg-blue-400"
+    : "!bg-blue-500 !opacity-0 group-hover:!opacity-50 hover:!opacity-100";
+  // Source handles get pointer-events-none while connecting so elementsFromPoint()
+  // finds target handles first (same physical position, source is on top in DOM).
+  const targetHandleClass = cn(handleBase, handleVisibility);
+  const sourceHandleClass = cn(handleBase, handleVisibility, isConnecting && "!pointer-events-none");
   const canRemoveNode = !NON_REMOVABLE_NODE_IDS.has(id);
 
   const stackLayers = Math.min(data.instances, 4) - 1; // 0-3 shadow layers behind
@@ -89,10 +97,10 @@ const CustomNodeInner = ({ id, data }: NodeProps<NodeData>) => {
 
   return (
     <div className="relative group">
-      <Handle id="target-left" type="target" position={Position.Left} className={handleClassName} />
-      <Handle id="target-top" type="target" position={Position.Top} className={handleClassName} />
-      <Handle id="target-right" type="target" position={Position.Right} className={handleClassName} />
-      <Handle id="target-bottom" type="target" position={Position.Bottom} className={handleClassName} />
+      <Handle id="target-left" type="target" position={Position.Left} className={targetHandleClass} />
+      <Handle id="target-top" type="target" position={Position.Top} className={targetHandleClass} />
+      <Handle id="target-right" type="target" position={Position.Right} className={targetHandleClass} />
+      <Handle id="target-bottom" type="target" position={Position.Bottom} className={targetHandleClass} />
 
       {/* Stacked card shadows for multi-instance */}
       {Array.from({ length: stackLayers }).map((_, i) => (
@@ -275,10 +283,10 @@ const CustomNodeInner = ({ id, data }: NodeProps<NodeData>) => {
         </div>
       </div>
 
-      <Handle id="source-left" type="source" position={Position.Left} className={handleClassName} />
-      <Handle id="source-top" type="source" position={Position.Top} className={handleClassName} />
-      <Handle id="source-right" type="source" position={Position.Right} className={handleClassName} />
-      <Handle id="source-bottom" type="source" position={Position.Bottom} className={handleClassName} />
+      <Handle id="source-left" type="source" position={Position.Left} className={sourceHandleClass} />
+      <Handle id="source-top" type="source" position={Position.Top} className={sourceHandleClass} />
+      <Handle id="source-right" type="source" position={Position.Right} className={sourceHandleClass} />
+      <Handle id="source-bottom" type="source" position={Position.Bottom} className={sourceHandleClass} />
     </div>
   );
 };
