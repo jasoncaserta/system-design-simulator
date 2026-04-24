@@ -1,5 +1,6 @@
 import { SystemCanvas } from './components/diagram/SystemCanvas';
 import { BottleneckPanel } from './components/diagnostics/BottleneckPanel';
+import { ChallengePanel } from './components/challenges/ChallengePanel';
 
 function App() {
   return (
@@ -8,6 +9,11 @@ function App() {
         {/* Bottleneck Overlay - Centered */}
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-auto">
           <BottleneckPanel />
+        </div>
+
+        {/* Challenge Panel - Bottom Left */}
+        <div className="absolute bottom-16 left-4 z-10 pointer-events-auto">
+          <ChallengePanel />
         </div>
 
         {/* React Flow Canvas */}

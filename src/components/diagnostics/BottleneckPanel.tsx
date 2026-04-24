@@ -1,14 +1,36 @@
 import { useState } from 'react';
 import { useSimulatorStore } from '../../store/useSimulatorStore';
-import { AlertTriangle, CheckCircle, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ChevronDown, ChevronUp, AlertCircle, WifiOff } from 'lucide-react';
+
+const getFailureExplanation = (nodeId: string, health: string): string => {
+  const base = nodeId.replace(/-\d+$/, '');
+  if (health === 'unavailable') {
+    switch (base) {
+      case 'relational-db': return 'DB offline → service threads block on timed-out queries. Writes fail entirely. Consider read replicas or circuit breakers.';
+      case 'nosql-db': return 'NoSQL cluster offline → dependent reads fail. Check partition/replica availability.';
+      case 'cache': return 'Cache offline → every read falls through to the database. Expect DB overload.';
+      case 'service': return 'Service is fully offline → no requests can be served.';
+      case 'load-balancer': return 'Load balancer offline → all ingress traffic is dropped.';
+      default: return `${base} is offline and processing no traffic.`;
+    }
+  }
+  // degraded
+  switch (base) {
+    case 'relational-db': return 'DB degraded (40% capacity) → queries slow down, risk of cascading timeouts.';
+    case 'cache': return 'Cache degraded (40% capacity) → increased miss rate, extra DB load.';
+    case 'service': return 'Service degraded (40% capacity) → request queue grows, latency spikes.';
+    default: return `${base} degraded to 40% capacity.`;
+  }
+};
 
 export const BottleneckPanel = () => {
   const { nodes } = useSimulatorStore();
   const [isOpen, setIsOpen] = useState(false);
 
-  const overloadedNodes = nodes.filter(n => n.data.status === 'overloaded');
+  const offlineNodes = nodes.filter(n => n.data.healthState === 'unavailable' || n.data.healthState === 'degraded');
+  const overloadedNodes = nodes.filter(n => n.data.status === 'overloaded' && n.data.healthState !== 'unavailable');
   const stressedNodes = nodes.filter(n => n.data.status === 'stressed');
-  const totalWarnings = overloadedNodes.length + stressedNodes.length;
+  const totalWarnings = overloadedNodes.length + stressedNodes.length + offlineNodes.length;
 
   const getRecommendation = (nodeId: string) => {
     const baseId = nodeId.replace(/-\d+$/, '');
@@ -37,26 +59,30 @@ export const BottleneckPanel = () => {
     );
   }
 
+  const hasOffline = offlineNodes.length > 0;
+
   return (
     <div className="w-full flex flex-col pointer-events-auto">
       {/* Dropdown Header */}
-      <button 
+      <button
         onClick={() => setIsOpen(!isOpen)}
         className={`flex items-center justify-between p-3 rounded-xl shadow-lg transition-all duration-300 border backdrop-blur-md ${
-          overloadedNodes.length > 0 
-            ? 'bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400' 
+          hasOffline || overloadedNodes.length > 0
+            ? 'bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400'
             : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-700 dark:text-yellow-400'
         }`}
       >
         <div className="flex items-center space-x-3">
-          {overloadedNodes.length > 0 ? (
+          {hasOffline ? (
+            <WifiOff className="shrink-0 animate-pulse" size={20} />
+          ) : overloadedNodes.length > 0 ? (
             <AlertCircle className="shrink-0 animate-pulse" size={20} />
           ) : (
             <AlertTriangle className="shrink-0" size={20} />
           )}
           <div className="text-left">
             <p className="text-xs font-black uppercase tracking-widest">
-              {overloadedNodes.length > 0 ? 'Critical Bottlenecks' : 'System Warnings'}
+              {hasOffline ? 'Node Failures' : overloadedNodes.length > 0 ? 'Critical Bottlenecks' : 'System Warnings'}
             </p>
             <p className="text-[10px] font-bold opacity-80 uppercase">
               {totalWarnings} {totalWarnings === 1 ? 'Node' : 'Nodes'} requiring attention
@@ -69,6 +95,22 @@ export const BottleneckPanel = () => {
       {/* Dropdown Content */}
       {isOpen && (
         <div className="mt-2 space-y-2 max-h-[400px] overflow-y-auto pr-1">
+          {offlineNodes.map(node => (
+            <div key={node.id} className="bg-gray-500/10 dark:bg-gray-950/40 border border-gray-500/20 p-3 rounded-lg backdrop-blur-md">
+              <div className="flex justify-between items-start mb-1">
+                <span className="text-[11px] font-black uppercase text-gray-600 dark:text-gray-300">
+                  {node.data.label} {node.data.healthState === 'unavailable' ? 'Offline' : 'Degraded'}
+                </span>
+                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${node.data.healthState === 'unavailable' ? 'bg-gray-500/20 text-gray-700 dark:text-gray-300' : 'bg-amber-500/20 text-amber-700 dark:text-amber-300'}`}>
+                  {node.data.healthState === 'unavailable' ? '0%' : '40%'}
+                </span>
+              </div>
+              <p className="text-[10px] text-gray-700/80 dark:text-gray-300/70 font-medium italic">
+                {getFailureExplanation(node.id, node.data.healthState || 'healthy')}
+              </p>
+            </div>
+          ))}
+
           {overloadedNodes.map(node => (
             <div key={node.id} className="bg-red-500/10 dark:bg-red-950/40 border border-red-500/20 p-3 rounded-lg backdrop-blur-md">
               <div className="flex justify-between items-start mb-1">

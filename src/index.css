@@ -30,6 +30,18 @@ body {
   box-shadow: none !important;
 }
 
+/* Snap target feedback during connection drag */
+.react-flow__handle.react-flow__handle-valid {
+  background: #22c55e !important;
+  opacity: 1 !important;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.4), 0 0 8px rgba(34, 197, 94, 0.6) !important;
+}
+
+.react-flow__handle.react-flow__handle-invalid {
+  background: #ef4444 !important;
+  opacity: 0.35 !important;
+}
+
 .react-flow__node-custom {
   background: transparent !important;
   border: 0 !important;

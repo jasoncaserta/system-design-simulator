@@ -35,6 +35,13 @@ export const replicationModeOptions = [
   { value: 'leader_follower', label: 'Leader/Follower', description: 'One leader handles writes while followers absorb reads.' },
 ] as const;
 
+export const consistencyModelOptions = [
+  { value: 'eventual', label: 'Eventual', description: 'Best throughput. Reads may return stale data from replicas.' },
+  { value: 'bounded-staleness', label: 'Bounded', description: 'Reads lag writes by a bounded window. Mild staleness risk.' },
+  { value: 'read-your-writes', label: 'RYW', description: 'You see your own writes. Others may see stale data.' },
+  { value: 'strong', label: 'Strong', description: 'All reads see the latest write. Sync overhead reduces write throughput.' },
+] as const;
+
 export const sizes = [
   { label: 'small', mult: 0.5 },
   { label: 'medium', mult: 1.0 },
